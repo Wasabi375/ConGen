@@ -1,18 +1,132 @@
-use clap::Command;
+mod impls;
 
-pub trait Configuration {
+use std::borrow::Cow;
+
+use clap::{Arg, Command};
+
+/// Denotes that the operation is not supported by a [Configuration]
+pub struct NotSupported;
+
+pub trait Configuration: Sized {
     type CongenChange;
 
     fn apply_change(&mut self, change: Self::CongenChange);
-    fn command() -> Command;
+
+    fn description(field_name: Option<&'static str>) -> Description;
+
+    /// Returns `Ok(default_value)` if this type has a default
+    fn default() -> Result<Self, NotSupported> {
+        Err(NotSupported)
+    }
+
+    /// If [Self::CongenChange] supports an `unwrap` operation this should
+    /// return `Ok(change.unwrap())`. Otherwise `Err(NotSupported)`
+    fn unwrap_change(_change: Self::CongenChange) -> Result<Self, NotSupported> {
+        Err(NotSupported)
+    }
+
+    fn type_name() -> Cow<'static, str>;
 }
 
-pub trait ConfigValue: Sized {
-    fn default() -> Option<Self>;
-    fn unset_value() -> Option<Self>;
-    fn flag_value() -> Option<Self>;
+pub trait ConfigurationDefault: Configuration {}
+
+pub trait ConfigurationUnset: Configuration {
+    fn unset_value() -> Self;
 }
 
-pub trait ConfigValuePartialDefault: ConfigValue {
-    fn default() -> Self;
+pub trait ConfigurationFlag: Configuration {
+    fn flag() -> Self;
+}
+
+#[derive(Debug)]
+pub enum Description {
+    Composit(CompositDescription),
+    Field(FieldDescription),
+}
+
+impl From<CompositDescription> for Description {
+    fn from(value: CompositDescription) -> Self {
+        Description::Composit(value)
+    }
+}
+impl From<FieldDescription> for Description {
+    fn from(value: FieldDescription) -> Self {
+        Description::Field(value)
+    }
+}
+
+#[derive(Debug)]
+pub struct CompositDescription {
+    pub field_name: Option<&'static str>,
+    pub type_name: Cow<'static, str>,
+    pub fields: Vec<FieldDescription>,
+    pub composites: Vec<CompositDescription>,
+}
+
+impl CompositDescription {
+    pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
+        let own_fields = self.fields.iter().cloned().map(|field| {
+            let mut full_name = String::new();
+            if let Some(field_name) = self.field_name {
+                full_name.push_str(field_name);
+                full_name.push('.');
+            }
+            full_name.push_str(field.field_name);
+            (full_name, field)
+        });
+
+        let child_fields =
+            self.composites
+                .iter()
+                .flat_map(|child| child.fields())
+                .map(|(mut name, field)| {
+                    if let Some(field_name) = self.field_name {
+                        name.insert(0, '.');
+                        name.insert_str(0, field_name);
+                    }
+                    (name, field)
+                });
+        let child_fields: Box<dyn Iterator<Item = (String, FieldDescription)>> =
+            Box::new(child_fields);
+
+        own_fields.chain(child_fields)
+    }
+
+    pub fn extend_set_command(&self, cmd: Command) -> Command {
+        cmd.subcommands(self.fields().map(|(full_name, field)| {
+            let mut arg = Arg::new(field.field_name);
+            arg = if field.is_flag {
+                arg
+            } else {
+                arg.value_name(field.type_name.to_uppercase())
+            };
+
+            Command::new(full_name).arg(arg)
+        }))
+    }
+
+    pub fn extend_unset_command(&self, cmd: Command) -> Command {
+        cmd.subcommands(
+            self.fields()
+                .filter(|(_, field)| field.allow_unset)
+                .map(|(full_name, _field)| Command::new(full_name)),
+        )
+    }
+
+    pub fn extend_use_default_command(&self, cmd: Command) -> Command {
+        cmd.subcommands(
+            self.fields()
+                .filter(|(_, field)| field.has_default)
+                .map(|(full_name, _field)| Command::new(full_name)),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldDescription {
+    field_name: &'static str,
+    type_name: Cow<'static, str>,
+    is_flag: bool,
+    allow_unset: bool,
+    has_default: bool,
 }
