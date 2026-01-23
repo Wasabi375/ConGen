@@ -1,0 +1,21 @@
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Burkahrd Mittelbach <wasabi37a@googlemail.com"]
+edition = "2024"
+
+[workspace.dependencies]
+congen = { path = "congen" }
+
+syn = "2.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+clap = "4.5"
+
+[workspace]
+members = [
+    "congen",
+    "derive",
+    "examples/basic"
+]
+resolver = "3"

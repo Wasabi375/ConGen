@@ -1,0 +1,9 @@
+# temporary and editor files
+.DS_Store
+.idea
+*.log
+tmp/
+
+# build artifacts
+/target/
+
