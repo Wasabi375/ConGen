@@ -3,5 +3,10 @@ name = "congen"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std"]
+std = [ "congen-derive/std" ]
+
 [dependencies]
+congen-derive.workspace = true
 clap.workspace = true

@@ -1,9 +1,15 @@
 [package]
-name = "derive"
+name = "congen-derive"
 version.workspace = true
 edition.workspace = true
 
+[features]
+std = []
+
 [dependencies]
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true
 
 [lib]
 proc-macro = true

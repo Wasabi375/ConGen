@@ -1,4 +1,5 @@
 mod impls;
+pub use congen_derive::Configuration;
 
 use std::borrow::Cow;
 
@@ -7,6 +8,8 @@ use clap::{Arg, Command};
 /// Denotes that the operation is not supported by a [Configuration]
 pub struct NotSupported;
 
+// TODO split into public and internal trait, only apply_change should be called by consumers of
+// this lib while the rest of the functions are used internally to implement the interface
 pub trait Configuration: Sized {
     type CongenChange;
 
@@ -28,20 +31,43 @@ pub trait Configuration: Sized {
     fn type_name() -> Cow<'static, str>;
 }
 
-pub trait ConfigurationDefault: Configuration {}
+/// A value type used for configurations
+// TODO implies something something Parse in clap from string
+// e.g. primitive, string, value enum, etc
+pub trait ConfigurationValue: Configuration {}
 
-pub trait ConfigurationUnset: Configuration {
-    fn unset_value() -> Self;
-}
+impl<T> ConfigurationOptionSafe for T where T: ConfigurationValue {}
 
-pub trait ConfigurationFlag: Configuration {
-    fn flag() -> Self;
+/// Implies that [Configuration::default] or [Configuration::unwrap_change]
+/// are supported
+// TODO internal
+pub trait ConfigurationOptionSafe: Configuration {}
+
+// TODO internal
+pub fn check_safe_in_option<T: ConfigurationOptionSafe>() -> bool {
+    true
 }
 
 #[derive(Debug)]
 pub enum Description {
     Composit(CompositDescription),
     Field(FieldDescription),
+}
+
+impl Description {
+    pub fn as_option(self) -> Self {
+        match self {
+            Description::Composit(composit) => Self::Composit(composit.as_option()),
+            Description::Field(field) => Self::Field(field.as_option()),
+        }
+    }
+
+    pub fn with_default(self) -> Self {
+        match self {
+            Description::Composit(composit) => Self::Composit(composit.with_default()),
+            Description::Field(field) => Self::Field(field.with_default()),
+        }
+    }
 }
 
 impl From<CompositDescription> for Description {
@@ -59,11 +85,28 @@ impl From<FieldDescription> for Description {
 pub struct CompositDescription {
     pub field_name: Option<&'static str>,
     pub type_name: Cow<'static, str>,
+    // TODO combine fields and composites?
     pub fields: Vec<FieldDescription>,
     pub composites: Vec<CompositDescription>,
+    pub has_default: bool,
+    pub allow_unset: bool,
 }
 
 impl CompositDescription {
+    pub fn as_option(self) -> Self {
+        Self {
+            allow_unset: true,
+            ..self
+        }
+    }
+
+    pub fn with_default(self) -> Self {
+        Self {
+            has_default: true,
+            ..self
+        }
+    }
+
     pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
         let own_fields = self.fields.iter().cloned().map(|field| {
             let mut full_name = String::new();
@@ -129,4 +172,21 @@ pub struct FieldDescription {
     is_flag: bool,
     allow_unset: bool,
     has_default: bool,
+}
+
+impl FieldDescription {
+    pub fn as_option(self) -> Self {
+        Self {
+            is_flag: false,
+            allow_unset: true,
+            ..self
+        }
+    }
+
+    pub fn with_default(self) -> Self {
+        Self {
+            has_default: true,
+            ..self
+        }
+    }
 }
