@@ -1,21 +1,28 @@
+mod clap_bridge;
 mod impls;
+
 pub use congen_derive::Configuration;
 
-use std::borrow::Cow;
+use std::{any::TypeId, borrow::Cow};
 
-use clap::{Arg, Command};
+pub use clap_bridge::CongenClap;
 
 /// Denotes that the operation is not supported by a [Configuration]
+#[derive(Debug)]
 pub struct NotSupported;
+
+#[derive(Debug)]
+pub struct ParseError;
 
 // TODO split into public and internal trait, only apply_change should be called by consumers of
 // this lib while the rest of the functions are used internally to implement the interface
 pub trait Configuration: Sized {
-    type CongenChange;
+    type CongenChange: crate::CongenChange;
 
+    /// apply change to `self`
     fn apply_change(&mut self, change: Self::CongenChange);
 
-    fn description(field_name: Option<&'static str>) -> Description;
+    fn description(field_name: &'static str) -> Description;
 
     /// Returns `Ok(default_value)` if this type has a default
     fn default() -> Result<Self, NotSupported> {
@@ -28,26 +35,82 @@ pub trait Configuration: Sized {
         Err(NotSupported)
     }
 
+    /// Parses a simple field value.
+    ///
+    /// Returns `Err(NotSupported)` for complex structs that can't be directly parsed from a
+    /// string.
+    /// Otherwise it should either return `Ok(Ok(parsed_value))` or `Ok(Err(parse_error))`
+    fn parse(_input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+        Err(NotSupported)
+    }
+
+    // TODO verify function that can check that parsed values are within bounds, etc.
+    //  Bounds check should be implemented on the composite. Fields can check during parse.
+    //  However a composite might have additional requirements, e.g u32 must be greater than 10
+
     fn type_name() -> Cow<'static, str>;
 }
 
-/// A value type used for configurations
-// TODO implies something something Parse in clap from string
-// e.g. primitive, string, value enum, etc
-pub trait ConfigurationValue: Configuration {}
+pub trait CongenChange: Sized {
+    /// An empty change.
+    ///
+    /// applying the result of this function should have no effect
+    fn empty() -> Self;
 
-impl<T> ConfigurationOptionSafe for T where T: ConfigurationValue {}
+    /// combine 2 changes.
+    ///
+    /// # Implementation
+    ///
+    /// given a `configuration: Self::Configuration` applying the result of
+    /// `change_a.apply_change(change_b)` should be the same as applying `change_a` and
+    /// then `change_b`, e.g.
+    /// ```ignore
+    /// let combined = change_a.apply_change(change_b);
+    /// configuration.apply_change(combined)
+    /// ```
+    /// should be the same as
+    /// ```ignore
+    /// configuration.apply_change(change_a);
+    /// configuration.apply_change(change_b);
+    /// ```
+    fn apply_change(&mut self, change: Self);
 
-/// Implies that [Configuration::default] or [Configuration::unwrap_change]
-/// are supported
-// TODO internal
-pub trait ConfigurationOptionSafe: Configuration {}
-
-// TODO internal
-pub fn check_safe_in_option<T: ConfigurationOptionSafe>() -> bool {
-    true
+    fn from_path_and_verb<'a, P>(path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    where
+        P: Iterator<Item = &'a str>;
 }
 
+// TODO better name
+// TODO implement Error (thiserror)
+#[derive(Debug)]
+pub enum FromVerbError {
+    InvalidPath,
+    UnsuportedVerb(ChangeVerb),
+    NotSupported(NotSupported),
+    ParseError(ParseError),
+}
+
+impl From<NotSupported> for FromVerbError {
+    fn from(value: NotSupported) -> Self {
+        FromVerbError::NotSupported(value)
+    }
+}
+
+impl From<ParseError> for FromVerbError {
+    fn from(value: ParseError) -> Self {
+        FromVerbError::ParseError(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChangeVerb {
+    Set(String),
+    SetFlag,
+    Unset,
+    UseDefault,
+}
+
+// TODO remove TypeId. I don't use it anymore
 #[derive(Debug)]
 pub enum Description {
     Composit(CompositDescription),
@@ -68,6 +131,47 @@ impl Description {
             Description::Field(field) => Self::Field(field.with_default()),
         }
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Description::Field(f) => f.field_name,
+            Description::Composit(c) => c.field_name,
+        }
+    }
+
+    pub fn type_id(&self) -> TypeId {
+        match self {
+            Description::Field(f) => f.type_id,
+            Description::Composit(c) => c.type_id,
+        }
+    }
+
+    pub fn has_default(&self) -> bool {
+        match self {
+            Description::Field(f) => f.has_default,
+            Description::Composit(c) => c.has_default,
+        }
+    }
+
+    pub fn is_path_valid<'a, 's, P>(&'s self, mut path: P) -> bool
+    where
+        P: Iterator<Item = &'a str>,
+    {
+        match self {
+            Description::Composit(composit_description) => {
+                let Some(next_field_name) = path.next() else {
+                    return false;
+                };
+
+                let Some(next_field) = composit_description.field(next_field_name) else {
+                    return false;
+                };
+
+                next_field.is_path_valid(path)
+            }
+            Description::Field(_field_description) => path.next().is_none(),
+        }
+    }
 }
 
 impl From<CompositDescription> for Description {
@@ -83,9 +187,10 @@ impl From<FieldDescription> for Description {
 
 #[derive(Debug)]
 pub struct CompositDescription {
-    pub field_name: Option<&'static str>,
+    pub field_name: &'static str,
     pub type_name: Cow<'static, str>,
-    pub children: Vec<Description>,
+    pub type_id: TypeId,
+    pub fields: Vec<Description>,
     pub has_default: bool,
     pub allow_unset: bool,
 }
@@ -105,67 +210,40 @@ impl CompositDescription {
         }
     }
 
+    pub fn field<'d, 'n>(&'d self, name: &'n str) -> Option<&'d Description> {
+        self.fields.iter().find(|f| f.name() == name)
+    }
+
     pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
-        self.children.iter().flat_map(move |child| match child {
+        self.fields.iter().flat_map(move |child| match child {
             Description::Field(field) => {
                 let mut full_name = String::new();
-                if let Some(field_name) = self.field_name {
-                    full_name.push_str(field_name);
-                    full_name.push('.');
-                }
                 full_name.push_str(field.field_name);
                 std::iter::once((full_name, field.clone())).collect::<Vec<_>>()
             }
             Description::Composit(composit) => composit
                 .fields()
-                .map(|(mut name, field)| {
-                    if let Some(field_name) = self.field_name {
-                        name.insert(0, '.');
-                        name.insert_str(0, field_name);
-                    }
-                    (name, field)
+                .map(|(name, field)| {
+                    let mut full_name = String::new();
+                    full_name.push_str(composit.field_name);
+                    full_name.push_str(".");
+                    full_name.push_str(&name);
+                    (full_name, field)
                 })
                 .collect::<Vec<_>>(),
         })
-    }
-
-    pub fn extend_set_command(&self, cmd: Command) -> Command {
-        cmd.subcommands(self.fields().map(|(full_name, field)| {
-            let mut arg = Arg::new(field.field_name);
-            arg = if field.is_flag {
-                arg
-            } else {
-                arg.value_name(field.type_name.to_uppercase())
-            };
-
-            Command::new(full_name).arg(arg)
-        }))
-    }
-
-    pub fn extend_unset_command(&self, cmd: Command) -> Command {
-        cmd.subcommands(
-            self.fields()
-                .filter(|(_, field)| field.allow_unset)
-                .map(|(full_name, _field)| Command::new(full_name)),
-        )
-    }
-
-    pub fn extend_use_default_command(&self, cmd: Command) -> Command {
-        cmd.subcommands(
-            self.fields()
-                .filter(|(_, field)| field.has_default)
-                .map(|(full_name, _field)| Command::new(full_name)),
-        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FieldDescription {
-    field_name: &'static str,
-    type_name: Cow<'static, str>,
-    is_flag: bool,
-    allow_unset: bool,
-    has_default: bool,
+    pub field_name: &'static str,
+    pub type_name: Cow<'static, str>,
+    pub type_id: TypeId,
+    pub is_flag: bool,
+    pub allow_unset: bool,
+    pub has_default: bool,
+    pub cmd_value_hint: clap::ValueHint,
 }
 
 impl FieldDescription {
@@ -181,6 +259,22 @@ impl FieldDescription {
         Self {
             has_default: true,
             ..self
+        }
+    }
+}
+
+#[derive(Default)]
+pub enum OptionChange<T> {
+    Apply(T),
+    #[default]
+    NoChange,
+}
+
+impl<T> OptionChange<T> {
+    pub fn unwrap(self) -> T {
+        match self {
+            OptionChange::Apply(c) => c,
+            OptionChange::NoChange => panic!("OptionChange is NoChange but unwrap was called!"),
         }
     }
 }

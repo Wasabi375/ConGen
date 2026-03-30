@@ -7,3 +7,4 @@ tmp/
 # build artifacts
 /target/
 
+/workspaces/

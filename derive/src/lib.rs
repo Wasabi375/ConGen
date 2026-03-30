@@ -1,7 +1,7 @@
 use quote::{format_ident, quote};
 use syn::{
-    Field, GenericArgument, Ident, ItemStruct, Meta, PathArguments, Token, Type,
-    parse::Parse, parse_macro_input, parse2, punctuated::Punctuated,
+    Field, GenericArgument, Ident, ItemStruct, Meta, PathArguments, Token, Type, parse::Parse,
+    parse_macro_input, parse2, punctuated::Punctuated,
 };
 #[cfg(feature = "std")]
 use syn::{Path, parse_quote};
@@ -173,7 +173,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         let ident = &field.field.ident;
         if let Some(ty) = field.option_type.as_ref() {
             quote! {
-                #ident: Option<<#ty as congen::Configuration>::CongenChange>
+                #ident: congen::OptionChange<<#ty as congen::Configuration>::CongenChange>
             }
         } else {
             let ty = &field.field.ty;
@@ -182,23 +182,17 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     });
     let apply_change = fields.iter().map(|field| {
         let ident = &field.field.ident;
-        if let Some(ty) = field.option_type.as_ref() {
-            quote! {
-                todo!("apply change to option of type {}", stringify!(#ty));
-            }
-        } else {
-            let ty = &field.field.ty;
-            quote! {
-                <#ty as congen::Configuration>::apply_change(&mut self.#ident, change.#ident);
-            }
+        let ty = &field.field.ty;
+        quote! {
+            <#ty as congen::Configuration>::apply_change(&mut self.#ident, change.#ident);
         }
     });
     let field_desc = fields.iter().map(|field| {
         let field_name = if let Some(ident) = &field.field.ident {
             let name = ident.to_string();
-            quote! { Some(#name) }
+            quote! { #name }
         } else {
-            quote! { None }
+            quote! { compile_error!("Configuration not supported for tupple structs") }
         };
         let ty = field.option_type.as_ref().unwrap_or(&field.field.ty);
 
@@ -217,11 +211,13 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             children.push(<#ty as congen::Configuration>::description(#field_name) #as_option #with_default);
         }
     });
+    let mut has_default = true;
     let field_defaults = fields.iter().map(|field| {
         let ident = &field.field.ident;
         let ty = &field.field.ty;
 
         if field.attr.default.is_none() {
+            has_default = false;
             return quote! {
                 #ident: { return Err(congen::NotSupported) }
             };
@@ -245,6 +241,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         #(#errors)*
 
         #[doc = concat!("Change type for [`", stringify!(#ty), "`] in use with [`congen::Configuration`]")]
+        #[derive(Default)]
         #vis struct #change_type {
             #(#change_fields),*
         }
@@ -256,7 +253,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 #(#apply_change)*
             }
 
-            fn description(field_name: Option<&'static str>) -> congen::Description {
+            fn description(field_name: &'static str) -> congen::Description {
                 let mut children = #vec::new();
 
                 #(#field_desc)*
@@ -265,7 +262,8 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     congen::CompositDescription {
                         field_name,
                         type_name: Self::type_name(),
-                        children,
+                        type_id: std::any::TypeId::of::<Self>(),
+                        fields: children,
                         has_default: false, // TODO how to fill this?
                         allow_unset: false,
                     }
