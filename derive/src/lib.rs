@@ -1,6 +1,6 @@
 use quote::{format_ident, quote};
 use syn::{
-    Field, GenericArgument, Ident, ItemStruct, Meta, PathArguments, Token, Type, TypePath,
+    Field, GenericArgument, Ident, ItemStruct, Meta, PathArguments, Token, Type,
     parse::Parse, parse_macro_input, parse2, punctuated::Punctuated,
 };
 #[cfg(feature = "std")]
@@ -214,10 +214,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         };
 
         quote! {
-            match <#ty as congen::Configuration>::description(#field_name) #as_option #with_default {
-                congen::Description::Composit(comp) => composites.push(comp),
-                congen::Description::Field(field) => fields.push(field),
-            }
+            children.push(<#ty as congen::Configuration>::description(#field_name) #as_option #with_default);
         }
     });
     let field_defaults = fields.iter().map(|field| {
@@ -260,8 +257,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             fn description(field_name: Option<&'static str>) -> congen::Description {
-                let mut fields = #vec::new();
-                let mut composites = #vec::new();
+                let mut children = #vec::new();
 
                 #(#field_desc)*
 
@@ -269,8 +265,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     congen::CompositDescription {
                         field_name,
                         type_name: Self::type_name(),
-                        fields,
-                        composites,
+                        children,
                         has_default: false, // TODO how to fill this?
                         allow_unset: false,
                     }

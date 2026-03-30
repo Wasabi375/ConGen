@@ -85,9 +85,7 @@ impl From<FieldDescription> for Description {
 pub struct CompositDescription {
     pub field_name: Option<&'static str>,
     pub type_name: Cow<'static, str>,
-    // TODO combine fields and composites?
-    pub fields: Vec<FieldDescription>,
-    pub composites: Vec<CompositDescription>,
+    pub children: Vec<Description>,
     pub has_default: bool,
     pub allow_unset: bool,
 }
@@ -108,31 +106,27 @@ impl CompositDescription {
     }
 
     pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
-        let own_fields = self.fields.iter().cloned().map(|field| {
-            let mut full_name = String::new();
-            if let Some(field_name) = self.field_name {
-                full_name.push_str(field_name);
-                full_name.push('.');
+        self.children.iter().flat_map(move |child| match child {
+            Description::Field(field) => {
+                let mut full_name = String::new();
+                if let Some(field_name) = self.field_name {
+                    full_name.push_str(field_name);
+                    full_name.push('.');
+                }
+                full_name.push_str(field.field_name);
+                std::iter::once((full_name, field.clone())).collect::<Vec<_>>()
             }
-            full_name.push_str(field.field_name);
-            (full_name, field)
-        });
-
-        let child_fields =
-            self.composites
-                .iter()
-                .flat_map(|child| child.fields())
+            Description::Composit(composit) => composit
+                .fields()
                 .map(|(mut name, field)| {
                     if let Some(field_name) = self.field_name {
                         name.insert(0, '.');
                         name.insert_str(0, field_name);
                     }
                     (name, field)
-                });
-        let child_fields: Box<dyn Iterator<Item = (String, FieldDescription)>> =
-            Box::new(child_fields);
-
-        own_fields.chain(child_fields)
+                })
+                .collect::<Vec<_>>(),
+        })
     }
 
     pub fn extend_set_command(&self, cmd: Command) -> Command {
