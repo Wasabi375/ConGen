@@ -169,7 +169,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let type_name = input.ident.to_string();
     let vis = &input.vis;
     let change_type = format_ident!("{}Change", input.ident);
-    let change_fields = fields.iter().map(|field| {
+    let change_fields_decls = fields.iter().map(|field| {
         let ident = &field.field.ident;
         if let Some(ty) = field.option_type.as_ref() {
             quote! {
@@ -178,6 +178,27 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         } else {
             let ty = &field.field.ty;
             quote! { #ident: <#ty as congen::Configuration>::CongenChange }
+        }
+    });
+    let change_fields_empty = fields.iter().map(|field| {
+        let ident = &field.field.ident;
+        quote! { #ident: congen::CongenChange::empty() }
+    });
+    let change_fields_apply_change = fields.iter().map(|field| {
+        let ident = &field.field.ident;
+        quote! {
+            congen::CongenChange::apply_change(&mut self.#ident, change.#ident);
+        }
+    });
+    let field_from_path = fields.iter().map(|field| {
+        let ident = &field.field.ident.clone().expect("tuples are not supported");
+        let ident_str = ident.to_string();
+        let field_ty = field.field.ty.clone();
+        quote! {
+            Some(#ident_str) => congen::CongenChange::apply_change(
+                &mut change.#ident,
+                <#field_ty as Configuration>::CongenChange::from_path_and_verb(path, verb)?,
+            )
         }
     });
     let apply_change = fields.iter().map(|field| {
@@ -243,7 +264,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         #[doc = concat!("Change type for [`", stringify!(#ty), "`] in use with [`congen::Configuration`]")]
         #[derive(Default)]
         #vis struct #change_type {
-            #(#change_fields),*
+            #(#change_fields_decls),*
         }
 
         impl congen::Configuration for #ty {
@@ -278,6 +299,33 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn type_name() -> std::borrow::Cow<'static, str> {
                 #type_name.into()
+            }
+        }
+
+        impl congen::CongenChange for #change_type {
+            fn empty() -> Self {
+                #change_type {
+                    #(#change_fields_empty),*
+                }
+            }
+
+            fn apply_change(&mut self, change: Self) {
+                #(#change_fields_apply_change);*
+            }
+
+            fn from_path_and_verb<'a, P>(
+                mut path: P,
+                verb: congen::ChangeVerb)
+            -> Result<Self, congen::FromVerbError>
+            where P: Iterator<Item = &'a str> {
+                let field_name = path.next();
+                let mut change = Self::empty();
+                match field_name {
+                    #(#field_from_path,)*
+                    Some(_) => return Err(congen::FromVerbError::InvalidPath),
+                    None => todo!("support unset and use-default verbs"),
+                };
+                Ok(change)
             }
         }
     }
