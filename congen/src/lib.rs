@@ -21,21 +21,18 @@ pub struct ParseError(pub String);
 // TODO split into public and internal trait, only apply_change should be called by consumers of
 // this lib while the rest of the functions are used internally to implement the interface
 pub trait Configuration: Sized {
+    /// The [CongenChange] type associated with this [Configuration]
     type CongenChange: crate::CongenChange;
 
     /// apply change to `self`
     fn apply_change(&mut self, change: Self::CongenChange);
 
+    /// Get a description of this [Configuration]
     fn description(field_name: &'static str) -> Description;
 
     /// Returns `Ok(default_value)` if this type has a default
+    // TODO internal
     fn default() -> Result<Self, NotSupported> {
-        Err(NotSupported)
-    }
-
-    /// If [Self::CongenChange] supports an `unwrap` operation this should
-    /// return `Ok(change.unwrap())`. Otherwise `Err(NotSupported)`
-    fn unwrap_change(_change: Self::CongenChange) -> Result<Self, NotSupported> {
         Err(NotSupported)
     }
 
@@ -44,6 +41,7 @@ pub trait Configuration: Sized {
     /// Returns `Err(NotSupported)` for complex structs that can't be directly parsed from a
     /// string.
     /// Otherwise it should either return `Ok(Ok(parsed_value))` or `Ok(Err(parse_error))`
+    // TODO internal
     fn parse(_input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
         Err(NotSupported)
     }
@@ -52,7 +50,13 @@ pub trait Configuration: Sized {
     //  Bounds check should be implemented on the composite. Fields can check during parse.
     //  However a composite might have additional requirements, e.g u32 must be greater than 10
 
-    fn type_name() -> Cow<'static, str>;
+    /// The typename of this [Configuration].
+    ///
+    /// This is used in a user-facing system and does not need to exactly match the rust type.
+    // TODO internal
+    fn type_name() -> Cow<'static, str> {
+        std::any::type_name::<Self>().into()
+    }
 }
 
 pub trait CongenChange: Sized {
@@ -79,11 +83,25 @@ pub trait CongenChange: Sized {
     /// ```
     fn apply_change(&mut self, change: Self);
 
+    /// Create a change that fills the `path` based on the verb
+    ///
+    /// # Example
+    ///
+    /// A path `[a, b, c]` and a verb `ChangeVerb::UseDefault` means that the result
+    /// should be something like `empty().a.b.c = default()`.
+    ///
+    /// # Implementation
+    ///
+    /// an empty path always refers to `Self` while any path entry refers to a subfield
+    /// relative to `self`.
+    /// The result should be initialized to `Self::empty` with just the final field in the path
+    /// changed based on the verb.
     fn from_path_and_verb<'a, P>(path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>;
 }
 
+#[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum VerbError {
     #[error("invalid path: the specified configuration path does not exist")]
@@ -98,29 +116,41 @@ pub enum VerbError {
     DowncastFailed,
 }
 
+/// A [ChangeVerb] is used to create a [CongenChange] based on a path.
+///
+/// See [CongenChange::from_path_and_verb].
+// TODO internal
 #[derive(Debug)]
 pub enum ChangeVerb {
+    /// Set the change to [Configuration::parse] of the value
     Set(String),
+    /// Enable the flag in the change
     SetFlag,
+    /// Unset the change
     Unset,
+    /// Use the default value for the change.
     UseDefault,
+    /// Similar to [ChangeVerb::Set] but already contains the parsed value
+    ///
+    /// The value must be of the same type as defined by the [Configuration] path.
     SetAny(Box<dyn Any + 'static>),
 }
 
+/// Descibes a [Configuration]
+// TODO internal
 #[derive(Debug)]
 pub enum Description {
+    /// A composite type, e.g. structs or enums with values
     Composit(CompositDescription),
+    /// A simple parsable field, e.g. String, int, anything parsable from the command line
     Field(FieldDescription),
 }
 
 impl Description {
-    pub fn as_option(self) -> Self {
-        match self {
-            Description::Composit(composit) => Self::Composit(composit.as_option()),
-            Description::Field(field) => Self::Field(field.as_option()),
-        }
-    }
-
+    /// creates a [Description] that claims to have a default value.
+    ///
+    /// When calling this the caller must ensure that the coresponding [Configuration]
+    /// can provide a default value.
     pub fn with_default(self) -> Self {
         match self {
             Description::Composit(composit) => Self::Composit(composit.with_default()),
@@ -128,6 +158,7 @@ impl Description {
         }
     }
 
+    /// The name of the Field/Struct/Enum
     pub fn name(&self) -> &'static str {
         match self {
             Description::Field(f) => f.field_name,
@@ -135,6 +166,7 @@ impl Description {
         }
     }
 
+    /// Whether or not the [Configuration] provides a default value
     pub fn has_default(&self) -> bool {
         match self {
             Description::Field(f) => f.has_default,
@@ -142,6 +174,7 @@ impl Description {
         }
     }
 
+    /// Returns true if a path is valid for the [Configuration]
     pub fn is_path_valid<'a, 's, P>(&'s self, mut path: P) -> bool
     where
         P: Iterator<Item = &'a str>,
@@ -174,6 +207,7 @@ impl From<FieldDescription> for Description {
     }
 }
 
+/// A description for a composite type, e.g. structs or enums with values
 #[derive(Debug)]
 pub struct CompositDescription {
     pub field_name: &'static str,
@@ -184,6 +218,7 @@ pub struct CompositDescription {
 }
 
 impl CompositDescription {
+    #[allow(missing_docs)]
     pub fn as_option(self) -> Self {
         Self {
             allow_unset: true,
@@ -191,6 +226,7 @@ impl CompositDescription {
         }
     }
 
+    #[allow(missing_docs)]
     pub fn with_default(self) -> Self {
         Self {
             has_default: true,
@@ -198,10 +234,14 @@ impl CompositDescription {
         }
     }
 
+    /// returns a reference to the fields [Description] if the field exists
     pub fn field<'d, 'n>(&'d self, name: &'n str) -> Option<&'d Description> {
         self.fields.iter().find(|f| f.name() == name)
     }
 
+    /// Return an iterator over all terminal [FieldDescription] with their path.
+    // TODO I probably want something better that also gives me access to all
+    // [CompositeDescription]s  that allow for unset or use-default
     pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
         self.fields.iter().flat_map(move |child| match child {
             Description::Field(field) => {
@@ -223,6 +263,7 @@ impl CompositDescription {
     }
 }
 
+/// A description for a simple parsable field, e.g. String, int, anything parsable from the command line
 #[derive(Debug, Clone)]
 pub struct FieldDescription {
     pub field_name: &'static str,
@@ -234,6 +275,7 @@ pub struct FieldDescription {
 }
 
 impl FieldDescription {
+    #[allow(missing_docs)]
     pub fn as_option(self) -> Self {
         Self {
             is_flag: false,
@@ -242,6 +284,7 @@ impl FieldDescription {
         }
     }
 
+    #[allow(missing_docs)]
     pub fn with_default(self) -> Self {
         Self {
             has_default: true,
@@ -250,6 +293,8 @@ impl FieldDescription {
     }
 }
 
+/// [CongenChange] for [Option]
+// TODO internal
 #[derive(Default)]
 pub enum OptionChange<T> {
     Apply(T),
@@ -258,6 +303,7 @@ pub enum OptionChange<T> {
 }
 
 impl<T> OptionChange<T> {
+    /// Same as [Option::unwrap]
     pub fn unwrap(self) -> T {
         match self {
             OptionChange::Apply(c) => c,

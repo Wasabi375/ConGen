@@ -19,15 +19,14 @@ where
     }
 
     fn description(field_name: &'static str) -> Description {
-        T::description(field_name).as_option()
+        match T::description(field_name) {
+            Description::Composit(composit) => Description::Composit(composit.as_option()),
+            Description::Field(field) => Description::Field(field.as_option()),
+        }
     }
 
     fn default() -> Result<Self, NotSupported> {
         Ok(None)
-    }
-
-    fn unwrap_change(change: Self::CongenChange) -> Result<Self, NotSupported> {
-        Ok(change.unwrap())
     }
 
     fn type_name() -> std::borrow::Cow<'static, str> {
@@ -114,14 +113,6 @@ impl Configuration for bool {
         Ok(false)
     }
 
-    fn unwrap_change(change: Self::CongenChange) -> Result<Self, NotSupported> {
-        Ok(change.unwrap())
-    }
-
-    fn type_name() -> std::borrow::Cow<'static, str> {
-        "bool".into()
-    }
-
     fn parse(input: &str) -> Result<Result<Self, crate::ParseError>, NotSupported> {
         match bool::from_str(input) {
             Ok(value) => Ok(Ok(value)),
@@ -182,14 +173,6 @@ impl Configuration for String {
         .into()
     }
 
-    fn unwrap_change(change: Self::CongenChange) -> Result<Self, NotSupported> {
-        Ok(change.unwrap())
-    }
-
-    fn type_name() -> std::borrow::Cow<'static, str> {
-        "String".into()
-    }
-
     fn parse(input: &str) -> Result<Result<Self, crate::ParseError>, NotSupported> {
         Ok(Ok(input.to_owned()))
     }
@@ -245,14 +228,6 @@ impl Configuration for u32 {
             cmd_value_hint: clap::ValueHint::Other,
         }
         .into()
-    }
-
-    fn unwrap_change(change: Self::CongenChange) -> Result<Self, NotSupported> {
-        Ok(change.unwrap())
-    }
-
-    fn type_name() -> std::borrow::Cow<'static, str> {
-        "u32".into()
     }
 
     fn parse(input: &str) -> Result<Result<Self, crate::ParseError>, NotSupported> {

@@ -2,13 +2,26 @@ use clap::{Arg, Args, Command, FromArgMatches};
 
 use crate::{ChangeVerb, Configuration, CongenChange, Description};
 
+/// provides a [clap::Args] implementation for a [Configuration] for clap-derive.
+///
+/// Clap will parse a [CongenChange] for the [Configuration] which can
+/// then be applied to an existing config.
 pub struct CongenClap<T: Configuration> {
     change: T::CongenChange,
 }
 
 impl<T: Configuration> CongenClap<T> {
+    /// Provides the [CongenChange]
     pub fn into_change(self) -> T::CongenChange {
         self.change
+    }
+
+    /// Create a [clap::Command] that will result in a [CongenClap]
+    ///
+    /// This can be used with [clap]s non-derive based builders.
+    pub fn create_cmd(cmd_name: impl Into<clap::builder::Str>) -> clap::Command {
+        let cmd = clap::Command::new(cmd_name);
+        Self::augment_args_internal(cmd, false)
     }
 
     fn augment_args_internal(cmd: Command, for_update: bool) -> clap::Command {
