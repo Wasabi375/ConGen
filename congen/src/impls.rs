@@ -1,4 +1,4 @@
-use std::{any::TypeId, str::FromStr};
+use std::str::FromStr;
 
 use crate::{
     ChangeVerb, Configuration, CongenChange, Description, FieldDescription, FromVerbError,
@@ -105,7 +105,6 @@ impl Configuration for bool {
         FieldDescription {
             field_name,
             type_name: Self::type_name(),
-            type_id: TypeId::of::<Self>(),
             is_flag: true,
             allow_unset: true,
             has_default: false,
@@ -180,7 +179,6 @@ impl Configuration for String {
         FieldDescription {
             field_name,
             type_name: Self::type_name(),
-            type_id: TypeId::of::<Self>(),
             is_flag: false,
             allow_unset: true,
             has_default: false,
@@ -248,7 +246,6 @@ impl Configuration for u32 {
         FieldDescription {
             field_name,
             type_name: Self::type_name(),
-            type_id: TypeId::of::<Self>(),
             is_flag: false,
             allow_unset: false,
             has_default: false,

@@ -123,7 +123,6 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     congen::CompositDescription {
                         field_name,
                         type_name: Self::type_name(),
-                        type_id: std::any::TypeId::of::<Self>(),
                         fields: children,
                         has_default: false, // TODO how to fill this?
                         allow_unset: false,

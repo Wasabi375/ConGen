@@ -3,10 +3,7 @@ mod impls;
 
 pub use congen_derive::Configuration;
 
-use std::{
-    any::{Any, TypeId},
-    borrow::Cow,
-};
+use std::{any::Any, borrow::Cow};
 
 pub use clap_bridge::CongenClap;
 
@@ -115,7 +112,6 @@ pub enum ChangeVerb {
     SetAny(Box<dyn Any + 'static>),
 }
 
-// TODO remove TypeId. I don't use it anymore
 #[derive(Debug)]
 pub enum Description {
     Composit(CompositDescription),
@@ -141,13 +137,6 @@ impl Description {
         match self {
             Description::Field(f) => f.field_name,
             Description::Composit(c) => c.field_name,
-        }
-    }
-
-    pub fn type_id(&self) -> TypeId {
-        match self {
-            Description::Field(f) => f.type_id,
-            Description::Composit(c) => c.type_id,
         }
     }
 
@@ -194,7 +183,6 @@ impl From<FieldDescription> for Description {
 pub struct CompositDescription {
     pub field_name: &'static str,
     pub type_name: Cow<'static, str>,
-    pub type_id: TypeId,
     pub fields: Vec<Description>,
     pub has_default: bool,
     pub allow_unset: bool,
@@ -244,7 +232,6 @@ impl CompositDescription {
 pub struct FieldDescription {
     pub field_name: &'static str,
     pub type_name: Cow<'static, str>,
-    pub type_id: TypeId,
     pub is_flag: bool,
     pub allow_unset: bool,
     pub has_default: bool,
