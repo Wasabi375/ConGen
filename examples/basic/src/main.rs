@@ -41,15 +41,6 @@ fn main() {
     // config set opt.d 2
     // config unset optg
 
-    // let builder = Config::description("");
-    // println!("{:#?}", builder);
-    // println!();
-    // if let Description::Composit(builder) = builder {
-    //     for f in builder.fields() {
-    //         println!("{}: {:?}", f.0, f.1);
-    //     }
-    // }
-
     let args = cli_test::TestCli::parse();
     match args.command {
         cli_test::Commands::DoSomething => todo!(),
