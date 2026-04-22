@@ -65,7 +65,7 @@ where
             "OptionChange<Option<T>> implies this is a field"
         );
 
-        return match verb {
+        match verb {
             ChangeVerb::Set(value) => {
                 let change = T::parse(&value)??;
                 Ok(OptionChange::Apply(Some(change)))
@@ -84,7 +84,7 @@ where
                     T::default().expect("use-default verb used, but default is not implemented");
                 Ok(OptionChange::Apply(Some(default)))
             }
-        };
+        }
     }
 }
 

@@ -160,13 +160,13 @@ fn is_option_type(ty: &Type) -> Result<Option<Type>, syn::Error> {
             let Some(opt) = segments.next() else {
                 return Ok(None);
             };
-            if opt.ident.to_string() != "option" {
+            if opt.ident != "option" {
                 return Ok(None);
             };
             let Some(opt) = segments.next() else {
                 return Ok(None);
             };
-            if opt.ident.to_string() != "Option" {
+            if opt.ident != "Option" {
                 return Ok(None);
             };
             opt.clone()

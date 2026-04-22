@@ -235,7 +235,7 @@ impl CompositDescription {
     }
 
     /// returns a reference to the fields [Description] if the field exists
-    pub fn field<'d, 'n>(&'d self, name: &'n str) -> Option<&'d Description> {
+    pub fn field<'d>(&'d self, name: &str) -> Option<&'d Description> {
         self.fields.iter().find(|f| f.name() == name)
     }
 
@@ -254,7 +254,7 @@ impl CompositDescription {
                 .map(|(name, field)| {
                     let mut full_name = String::new();
                     full_name.push_str(composit.field_name);
-                    full_name.push_str(".");
+                    full_name.push('.');
                     full_name.push_str(&name);
                     (full_name, field)
                 })
