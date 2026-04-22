@@ -1,5 +1,6 @@
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{ItemStruct, parse_macro_input};
+use syn::{Ident, ItemStruct, parse_macro_input};
 #[cfg(feature = "std")]
 use syn::{Path, parse_quote};
 
@@ -43,27 +44,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             quote! { #ident: <#ty as congen::Configuration>::CongenChange }
         }
     });
-    let change_fields_empty = fields.iter().map(|field| {
-        let ident = &field.field.ident;
-        quote! { #ident: congen::CongenChange::empty() }
-    });
-    let change_fields_apply_change = fields.iter().map(|field| {
-        let ident = &field.field.ident;
-        quote! {
-            congen::CongenChange::apply_change(&mut self.#ident, change.#ident);
-        }
-    });
-    let field_from_path = fields.iter().map(|field| {
-        let ident = &field.field.ident.clone().expect("tuples are not supported");
-        let ident_str = ident.to_string();
-        let field_ty = field.field.ty.clone();
-        quote! {
-            Some(#ident_str) => congen::CongenChange::apply_change(
-                &mut change.#ident,
-                <#field_ty as Configuration>::CongenChange::from_path_and_verb(path, verb)?,
-            )
-        }
-    });
+
     let apply_change = fields.iter().map(|field| {
         let ident = &field.field.ident;
         let ty = &field.field.ty;
@@ -112,6 +93,8 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         }
     });
 
+    let congen_change_impl = derive_congen_change(&change_type, &fields);
+
     let errors = errors.iter().map(|e| e.to_compile_error());
 
     quote! {
@@ -159,15 +142,54 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         }
 
+        #congen_change_impl
+    }
+    .into()
+}
+
+fn derive_congen_change(change_type: &Ident, fields: &[CongenField]) -> TokenStream {
+    let field_idents: Vec<_> = fields.iter().map(|field| &field.field.ident).collect();
+
+    let fields_from_path = fields.iter().map(|field| {
+        let ident = &field.field.ident.clone().expect("tuples are not supported");
+        let ident_str = ident.to_string();
+        let field_ty = field.field.ty.clone();
+
+        let special_case_default_verb = match &field.attr.default {
+            Some(field::CongenDefault::Expr(default_expr)) => {
+                quote! {
+                    let mut path = path.peekable();
+                    let verb = if path.peek().is_none() && matches!(verb, congen::ChangeVerb::UseDefault) {
+                        let value: #field_ty = #default_expr;
+                        congen::ChangeVerb::SetAny(Box::new(value))
+                    } else {
+                        verb
+                    };
+                }
+            },
+            _ => quote! {}
+        };
+
+        quote! {
+            Some(#ident_str) => {
+                #special_case_default_verb
+                congen::CongenChange::apply_change(
+                    &mut change.#ident,
+                    <#field_ty as Configuration>::CongenChange::from_path_and_verb(path, verb)?,
+                );
+            }
+        }
+    });
+    quote! {
         impl congen::CongenChange for #change_type {
             fn empty() -> Self {
                 #change_type {
-                    #(#change_fields_empty),*
+                    #(#field_idents: congen::CongenChange::empty()),*
                 }
             }
 
             fn apply_change(&mut self, change: Self) {
-                #(#change_fields_apply_change);*
+                #(congen::CongenChange::apply_change(&mut self.#field_idents, change.#field_idents));*
             }
 
             fn from_path_and_verb<'a, P>(
@@ -178,7 +200,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 let field_name = path.next();
                 let mut change = Self::empty();
                 match field_name {
-                    #(#field_from_path,)*
+                    #(#fields_from_path,)*
                     Some(_) => return Err(congen::FromVerbError::InvalidPath),
                     None => todo!("support unset and use-default verbs"),
                 };
@@ -186,5 +208,4 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         }
     }
-    .into()
 }

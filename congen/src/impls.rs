@@ -7,7 +7,7 @@ use crate::{
 
 impl<T> Configuration for Option<T>
 where
-    T: Configuration<CongenChange = Option<T>>,
+    T: Configuration<CongenChange = Option<T>> + 'static,
     Option<T>: CongenChange,
 {
     type CongenChange = OptionChange<Option<T>>;
@@ -19,6 +19,7 @@ where
     }
 
     fn description(field_name: &'static str) -> Description {
+        // TODO type_id
         T::description(field_name).as_option()
     }
 
@@ -39,7 +40,7 @@ where
 
 impl<T> CongenChange for OptionChange<Option<T>>
 where
-    T: Configuration<CongenChange = Option<T>>,
+    T: Configuration<CongenChange = Option<T>> + 'static,
     Option<T>: CongenChange,
 {
     fn empty() -> Self {
@@ -70,6 +71,12 @@ where
             ChangeVerb::Set(value) => {
                 let change = T::parse(&value)??;
                 Ok(OptionChange::Apply(Some(change)))
+            }
+            ChangeVerb::SetAny(value) => {
+                let change = value
+                    .downcast()
+                    .map_err(|_| FromVerbError::DowncastFailed)?;
+                Ok(OptionChange::Apply(Some(*change)))
             }
             ChangeVerb::SetFlag => Err(FromVerbError::UnsuportedVerb(verb)),
             ChangeVerb::Unset => Ok(OptionChange::Apply(None)),
@@ -148,6 +155,11 @@ impl CongenChange for Option<bool> {
         );
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
+            ChangeVerb::SetAny(value) => Ok(Some(
+                *value
+                    .downcast()
+                    .map_err(|_| FromVerbError::DowncastFailed)?,
+            )),
             ChangeVerb::SetFlag => Ok(Some(true)),
             ChangeVerb::Unset => Ok(Some(false)),
             ChangeVerb::UseDefault => Ok(Some(Configuration::default()?)),
@@ -211,6 +223,11 @@ impl CongenChange for Option<String> {
         );
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
+            ChangeVerb::SetAny(value) => Ok(Some(
+                *value
+                    .downcast()
+                    .map_err(|_| FromVerbError::DowncastFailed)?,
+            )),
             ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
                 Err(FromVerbError::UnsuportedVerb(verb))
             }
@@ -277,6 +294,11 @@ impl CongenChange for Option<u32> {
         );
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
+            ChangeVerb::SetAny(value) => Ok(Some(
+                *value
+                    .downcast()
+                    .map_err(|_| FromVerbError::DowncastFailed)?,
+            )),
             ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
                 Err(FromVerbError::UnsuportedVerb(verb))
             }

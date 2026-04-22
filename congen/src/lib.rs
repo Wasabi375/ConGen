@@ -3,7 +3,10 @@ mod impls;
 
 pub use congen_derive::Configuration;
 
-use std::{any::TypeId, borrow::Cow};
+use std::{
+    any::{Any, TypeId},
+    borrow::Cow,
+};
 
 pub use clap_bridge::CongenClap;
 
@@ -88,6 +91,7 @@ pub enum FromVerbError {
     UnsuportedVerb(ChangeVerb),
     NotSupported(NotSupported),
     ParseError(ParseError),
+    DowncastFailed,
 }
 
 impl From<NotSupported> for FromVerbError {
@@ -102,12 +106,13 @@ impl From<ParseError> for FromVerbError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum ChangeVerb {
     Set(String),
     SetFlag,
     Unset,
     UseDefault,
+    SetAny(Box<dyn Any + 'static>),
 }
 
 // TODO remove TypeId. I don't use it anymore
