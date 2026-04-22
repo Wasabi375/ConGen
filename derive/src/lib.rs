@@ -78,13 +78,8 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         } else {
             quote! { compile_error!("Configuration not supported for tupple structs") }
         };
-        let ty = field.option_type.as_ref().unwrap_or(&field.field.ty);
+        let ty = &field.field.ty;
 
-        let as_option = if field.option_type.is_some() {
-            quote! { .as_option() }
-        } else {
-            quote! {}
-        };
         let with_default = if field.attr.default.is_some() {
             quote! { .with_default() }
         } else {
@@ -92,7 +87,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         };
 
         quote! {
-            children.push(<#ty as congen::Configuration>::description(#field_name) #as_option #with_default);
+            children.push(<#ty as congen::Configuration>::description(#field_name) #with_default);
         }
     });
     let mut has_default = true;
@@ -100,21 +95,20 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         let ident = &field.field.ident;
         let ty = &field.field.ty;
 
-        if field.attr.default.is_none() {
+        let Some(default) = field.attr.default.as_ref() else {
             has_default = false;
             return quote! {
                 #ident: { return Err(congen::NotSupported) }
             };
-        }
+        };
 
-        if field.option_type.is_some() {
-            quote! {
-                #ident: None
-            }
-        } else {
-            quote! {
+        match default {
+            field::CongenDefault::UseDefault => quote! {
                 #ident: <#ty as congen::Configuration>::default()?
-            }
+            },
+            field::CongenDefault::Expr(expr) => quote! {
+                #ident: #expr
+            },
         }
     });
 

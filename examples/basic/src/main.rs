@@ -22,7 +22,7 @@ struct Config {
 
 #[derive(congen::Configuration, Debug)]
 pub struct SubConfig {
-    // #[congen(default = 5)]
+    #[congen(default = 5)]
     d: u32,
     #[congen(default)]
     e: Option<u32>,
@@ -51,6 +51,7 @@ fn main() {
                 b2: "test".to_string(),
                 c: false,
                 sub: SubConfig { d: 2, e: None },
+                // opt: None,
             };
             config.apply_change(congen_clap.into_change());
 

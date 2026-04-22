@@ -1,8 +1,54 @@
-use quote::format_ident;
+use quote::{ToTokens, format_ident};
 use syn::{
-    Field, GenericArgument, Ident, Meta, PathArguments, Token, Type, parse::Parse, parse2,
+    Expr, Field, GenericArgument, Ident, Meta, PathArguments, Token, Type, parse::Parse, parse2,
     punctuated::Punctuated,
 };
+
+pub enum AttributeParam {
+    Flag(Ident),
+    NameValue {
+        ident: Ident,
+        value: Expr,
+        eq: Token![=],
+    },
+}
+
+impl AttributeParam {
+    fn ident(&self) -> &Ident {
+        match self {
+            AttributeParam::Flag(ident) => ident,
+            AttributeParam::NameValue { ident, .. } => ident,
+        }
+    }
+}
+
+impl Parse for AttributeParam {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let ident: Ident = input.parse()?;
+
+        if input.peek(Token![=]) {
+            let eq = input.parse()?;
+            let value = input.parse()?;
+
+            Ok(AttributeParam::NameValue { ident, value, eq })
+        } else {
+            Ok(AttributeParam::Flag(ident))
+        }
+    }
+}
+
+impl ToTokens for AttributeParam {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            AttributeParam::Flag(ident) => ident.to_tokens(tokens),
+            AttributeParam::NameValue { ident, value, eq } => {
+                ident.to_tokens(tokens);
+                eq.to_tokens(tokens);
+                value.to_tokens(tokens);
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct CongenAttribute {
@@ -11,16 +57,17 @@ pub struct CongenAttribute {
 
 pub enum CongenDefault {
     UseDefault,
+    Expr(Expr),
 }
 
 impl Parse for CongenAttribute {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let args = Punctuated::<Ident, Token![,]>::parse_terminated(input)?;
+        let args = Punctuated::<AttributeParam, Token![,]>::parse_terminated(input)?;
 
         let mut default = None;
 
         for arg in args {
-            match arg.to_string().as_str() {
+            match arg.ident().to_string().as_str() {
                 "default" => {
                     if default.is_some() {
                         return Err(syn::Error::new_spanned(
@@ -28,7 +75,11 @@ impl Parse for CongenAttribute {
                             "\"default\" should only be specified once in `congen` attribute",
                         ));
                     }
-                    default = Some(CongenDefault::UseDefault);
+
+                    default = Some(match arg {
+                        AttributeParam::Flag(_ident) => CongenDefault::UseDefault,
+                        AttributeParam::NameValue { value, .. } => CongenDefault::Expr(value),
+                    });
                 }
                 _ => {
                     return Err(syn::Error::new_spanned(
