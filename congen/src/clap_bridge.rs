@@ -93,7 +93,6 @@ where
         };
 
         let change = T::CongenChange::from_path_and_verb(field_path, verb)
-            // TODO convert panic into clap::Error with context
             .expect("Failed to create change for path");
 
         self.change.apply_change(change);

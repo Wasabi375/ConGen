@@ -19,7 +19,6 @@ where
     }
 
     fn description(field_name: &'static str) -> Description {
-        // TODO type_id
         T::description(field_name).as_option()
     }
 

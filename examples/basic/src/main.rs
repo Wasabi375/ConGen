@@ -29,21 +29,21 @@ pub struct SubConfig {
 }
 
 fn main() {
-    // config use-default a
-    // config set a 10
-    // config use-default b
-    // config set b "foo"
-    // config unset b
-    // config set c
-    // config unset c
-    // config set sub.d 5
-    // config set sub.e 42
-    // config set opt.d 2
-    // config unset optg
+    // config a use-default
+    // config a set 10
+    // config b use-default
+    // config b set "foo"
+    // config b unset
+    // config c set
+    // config c unset
+    // config sub.d set 5
+    // config sub.e set 42
+    // config opt.d set 2
+    // config opt unset
 
     let args = cli_test::TestCli::parse();
     match args.command {
-        cli_test::Commands::DoSomething => todo!(),
+        cli_test::Commands::DoSomething => {}
         cli_test::Commands::Config(congen_clap) => {
             let mut config = Config {
                 a: 1,
