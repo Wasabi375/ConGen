@@ -10,3 +10,4 @@ std = [ "congen-derive/std" ]
 [dependencies]
 congen-derive.workspace = true
 clap.workspace = true
+thiserror.workspace = true

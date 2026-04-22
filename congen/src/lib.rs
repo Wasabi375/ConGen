@@ -5,14 +5,18 @@ pub use congen_derive::Configuration;
 
 use std::{any::Any, borrow::Cow};
 
+use thiserror::Error;
+
 pub use clap_bridge::CongenClap;
 
 /// Denotes that the operation is not supported by a [Configuration]
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("operation not supported by this configuration type")]
 pub struct NotSupported;
 
-#[derive(Debug)]
-pub struct ParseError;
+#[derive(Debug, Error)]
+#[error("failed to parse value: {0}")]
+pub struct ParseError(pub String);
 
 // TODO split into public and internal trait, only apply_change should be called by consumers of
 // this lib while the rest of the functions are used internally to implement the interface
@@ -75,32 +79,23 @@ pub trait CongenChange: Sized {
     /// ```
     fn apply_change(&mut self, change: Self);
 
-    fn from_path_and_verb<'a, P>(path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    fn from_path_and_verb<'a, P>(path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>;
 }
 
-// TODO better name
-// TODO implement Error (thiserror)
-#[derive(Debug)]
-pub enum FromVerbError {
+#[derive(Debug, Error)]
+pub enum VerbError {
+    #[error("invalid path: the specified configuration path does not exist")]
     InvalidPath,
-    UnsuportedVerb(ChangeVerb),
-    NotSupported(NotSupported),
-    ParseError(ParseError),
+    #[error("unsupported verb '{0:?}' for this configuration field")]
+    UnsupportedVerb(ChangeVerb),
+    #[error(transparent)]
+    NotSupported(#[from] NotSupported),
+    #[error(transparent)]
+    ParseError(#[from] ParseError),
+    #[error("failed to downcast value to the expected type")]
     DowncastFailed,
-}
-
-impl From<NotSupported> for FromVerbError {
-    fn from(value: NotSupported) -> Self {
-        FromVerbError::NotSupported(value)
-    }
-}
-
-impl From<ParseError> for FromVerbError {
-    fn from(value: ParseError) -> Self {
-        FromVerbError::ParseError(value)
-    }
 }
 
 #[derive(Debug)]

@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
 use crate::{
-    ChangeVerb, Configuration, CongenChange, Description, FieldDescription, FromVerbError,
-    NotSupported, OptionChange, ParseError,
+    ChangeVerb, Configuration, CongenChange, Description, FieldDescription, NotSupported,
+    OptionChange, ParseError, VerbError,
 };
 
 impl<T> Configuration for Option<T>
@@ -53,7 +53,7 @@ where
         }
     }
 
-    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>,
     {
@@ -73,16 +73,14 @@ where
                 Ok(OptionChange::Apply(Some(change)))
             }
             ChangeVerb::SetAny(value) => {
-                let change = value
-                    .downcast()
-                    .map_err(|_| FromVerbError::DowncastFailed)?;
+                let change = value.downcast().map_err(|_| VerbError::DowncastFailed)?;
                 Ok(OptionChange::Apply(Some(*change)))
             }
-            ChangeVerb::SetFlag => Err(FromVerbError::UnsuportedVerb(verb)),
+            ChangeVerb::SetFlag => Err(VerbError::UnsupportedVerb(verb)),
             ChangeVerb::Unset => Ok(OptionChange::Apply(None)),
             ChangeVerb::UseDefault => {
                 if !desc.has_default() {
-                    return Err(FromVerbError::UnsuportedVerb(verb));
+                    return Err(VerbError::UnsupportedVerb(verb));
                 }
                 let default =
                     T::default().expect("use-default verb used, but default is not implemented");
@@ -128,7 +126,7 @@ impl Configuration for bool {
     fn parse(input: &str) -> Result<Result<Self, crate::ParseError>, NotSupported> {
         match bool::from_str(input) {
             Ok(value) => Ok(Ok(value)),
-            Err(_) => Ok(Err(ParseError)),
+            Err(e) => Ok(Err(ParseError(e.to_string()))),
         }
     }
 }
@@ -144,7 +142,7 @@ impl CongenChange for Option<bool> {
         }
     }
 
-    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>,
     {
@@ -155,9 +153,7 @@ impl CongenChange for Option<bool> {
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
             ChangeVerb::SetAny(value) => Ok(Some(
-                *value
-                    .downcast()
-                    .map_err(|_| FromVerbError::DowncastFailed)?,
+                *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
             ChangeVerb::SetFlag => Ok(Some(true)),
             ChangeVerb::Unset => Ok(Some(false)),
@@ -211,7 +207,7 @@ impl CongenChange for Option<String> {
         }
     }
 
-    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>,
     {
@@ -222,12 +218,10 @@ impl CongenChange for Option<String> {
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
             ChangeVerb::SetAny(value) => Ok(Some(
-                *value
-                    .downcast()
-                    .map_err(|_| FromVerbError::DowncastFailed)?,
+                *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
             ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
-                Err(FromVerbError::UnsuportedVerb(verb))
+                Err(VerbError::UnsupportedVerb(verb))
             }
         }
     }
@@ -265,7 +259,7 @@ impl Configuration for u32 {
     fn parse(input: &str) -> Result<Result<Self, crate::ParseError>, NotSupported> {
         match u32::from_str(input) {
             Ok(value) => Ok(Ok(value)),
-            Err(_) => Ok(Err(ParseError)),
+            Err(e) => Ok(Err(ParseError(e.to_string()))),
         }
     }
 }
@@ -281,7 +275,7 @@ impl CongenChange for Option<u32> {
         }
     }
 
-    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, FromVerbError>
+    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>,
     {
@@ -292,12 +286,10 @@ impl CongenChange for Option<u32> {
         match verb {
             ChangeVerb::Set(unparesd) => Ok(Some(Configuration::parse(&unparesd)??)),
             ChangeVerb::SetAny(value) => Ok(Some(
-                *value
-                    .downcast()
-                    .map_err(|_| FromVerbError::DowncastFailed)?,
+                *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
             ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
-                Err(FromVerbError::UnsuportedVerb(verb))
+                Err(VerbError::UnsupportedVerb(verb))
             }
         }
     }

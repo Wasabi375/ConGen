@@ -194,13 +194,13 @@ fn derive_congen_change(change_type: &Ident, fields: &[CongenField]) -> TokenStr
             fn from_path_and_verb<'a, P>(
                 mut path: P,
                 verb: congen::ChangeVerb)
-            -> Result<Self, congen::FromVerbError>
+            -> Result<Self, congen::VerbError>
             where P: Iterator<Item = &'a str> {
                 let field_name = path.next();
                 let mut change = Self::empty();
                 match field_name {
                     #(#fields_from_path,)*
-                    Some(_) => return Err(congen::FromVerbError::InvalidPath),
+                    Some(_) => return Err(congen::VerbError::InvalidPath),
                     None => todo!("support unset and use-default verbs"),
                 };
                 Ok(change)
