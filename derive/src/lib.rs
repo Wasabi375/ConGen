@@ -1,7 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{Ident, ItemStruct, parse_macro_input};
-#[cfg(feature = "std")]
 use syn::{Path, parse_quote};
 
 use crate::field::CongenField;
@@ -10,10 +9,7 @@ mod field;
 
 #[proc_macro_derive(Configuration, attributes(congen))]
 pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    #[cfg(feature = "std")]
     let vec: Path = parse_quote!(std::vec::Vec);
-    #[cfg(not(feature = "std"))]
-    let vec: Path = parse_quote!(alloc::vec::Vec);
 
     let input = parse_macro_input!(input as ItemStruct);
 

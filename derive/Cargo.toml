@@ -3,9 +3,6 @@ name = "congen-derive"
 version.workspace = true
 edition.workspace = true
 
-[features]
-std = []
-
 [dependencies]
 proc-macro2.workspace = true
 quote.workspace = true
