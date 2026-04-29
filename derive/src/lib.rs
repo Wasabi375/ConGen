@@ -100,7 +100,11 @@ fn derive_configuration_impl(
     });
 
     let field_defaults = fields.iter().map(|field| {
-        let ident = &field.field.ident;
+        let ident = &field
+            .field
+            .ident
+            .as_ref()
+            .expect("Tuple structs not supported");
         let ty = &field.field.ty;
 
         let Some(default) = field.attr.default.as_ref() else {
@@ -221,6 +225,16 @@ fn derive_congen_change(
             }
         }
     });
+
+    let field_path_names = fields.iter().map(|field| {
+        field
+            .field
+            .ident
+            .as_ref()
+            .expect("Tuple structs not supported")
+            .to_string()
+    });
+
     quote! {
         impl congen::CongenChange for #change_type {
             type Configuration = #config_type;
@@ -229,6 +243,30 @@ fn derive_congen_change(
                 #change_type {
                     #(#field_idents: congen::CongenChange::empty()),*
                 }
+            }
+
+            fn default() -> Result<Self, congen::NotSupported> {
+                fn map_err(err: congen::VerbError) -> congen::NotSupported {
+                    match err {
+                        congen::VerbError::InvalidPath | congen::VerbError::ParseError(_) | congen::VerbError::DowncastFailed =>
+                            panic!("unexpected error while creating default CongenChange: {err}"),
+                        congen::VerbError::NotSupported(_) | congen::VerbError::UnsupportedVerb(_) => congen::NotSupported
+                    }
+                }
+
+                let mut default = Self::empty();
+
+                #(
+                    eprintln!("create default for: {}", #field_path_names);
+
+                    default.apply_change(
+                        #change_type::from_path_and_verb([#field_path_names].into_iter(), congen::ChangeVerb::UseDefault)
+                            .map_err(map_err)?
+                    );
+                )*
+                eprintln!("done!");
+
+                Ok(default)
             }
 
             fn apply_change(&mut self, change: Self) {
@@ -245,7 +283,18 @@ fn derive_congen_change(
                 match field_name {
                     #(#fields_from_path,)*
                     Some(_) => return Err(congen::VerbError::InvalidPath),
-                    None => todo!("support unset and use-default verbs"),
+                    None => {
+                        return match verb {
+                            congen::ChangeVerb::Set(_) | congen::ChangeVerb::SetAny(_)
+                                => Err(congen::VerbError::UnsupportedVerb(verb)),
+                            congen::ChangeVerb::SetFlag | congen::ChangeVerb::Unset => {
+                                // TODO
+                                eprintln!("set-flag and unset are not yet implemented for derived congens");
+                                Err(congen::VerbError::UnsupportedVerb(verb))
+                            },
+                            congen::ChangeVerb::UseDefault => Ok(<Self as congen::CongenChange>::default()?),
+                        }
+                    },
                 };
                 Ok(change)
             }

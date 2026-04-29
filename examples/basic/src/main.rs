@@ -17,7 +17,9 @@ struct Config {
     b2: String,
     c: bool,
 
+    #[congen(default)] // FIXME default is not working here
     sub: SubConfig,
+    #[congen(default)]
     opt: Option<SubConfig>,
 }
 
@@ -27,6 +29,16 @@ pub struct SubConfig {
     d: u32,
     #[congen(default)]
     e: Option<u32>,
+}
+
+fn sub_config_default() -> SubConfigChange {
+    use congen::{ChangeVerb, CongenChange};
+    let mut d =
+        SubConfigChange::from_path_and_verb(["d"].into_iter(), ChangeVerb::UseDefault).unwrap();
+    let e = SubConfigChange::from_path_and_verb(["e"].into_iter(), ChangeVerb::UseDefault).unwrap();
+
+    d.apply_change(e);
+    d
 }
 
 fn main() {
@@ -58,7 +70,7 @@ fn main() {
                 sub: SubConfig { d: 2, e: None },
                 opt: None,
             };
-            config.apply_change(dbg!(congen_clap.into_change()));
+            dbg!(&mut config).apply_change(dbg!(congen_clap.into_change()));
 
             println!("{config:#?}",)
         }

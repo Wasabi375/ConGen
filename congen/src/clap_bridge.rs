@@ -25,33 +25,37 @@ impl<T: Configuration> CongenClap<T> {
     }
 
     fn augment_args_internal(cmd: Command, for_update: bool) -> clap::Command {
-        let Description::Composit(description) = T::description("__clap") else {
-            todo!("CongenClap does not yet support FieldDescriptions");
-        };
+        cmd.subcommands(
+            T::description("__clap")
+                .actionable_fields()
+                .iter()
+                .map(|actionable| {
+                    let field_name = actionable.path.join(".");
+                    let mut field_command =
+                        Command::new(field_name).subcommand_required(!for_update);
 
-        cmd.subcommands(description.fields().map(|(field_name, field_desc)| {
-            let mut field_command = Command::new(field_name).subcommand_required(!for_update);
+                    if let Description::Field(field) = &actionable.description {
+                        let mut set = Command::new("set");
+                        if !field.is_flag {
+                            set = set.arg(
+                                Arg::new("value")
+                                    .value_name(field.type_name.to_uppercase())
+                                    .required(!for_update),
+                            );
+                        }
+                        field_command = field_command.subcommand(set);
+                    }
 
-            {
-                let mut set = Command::new("set");
-                if !field_desc.is_flag {
-                    set = set.arg(
-                        Arg::new("value")
-                            .value_name(field_desc.type_name.to_uppercase())
-                            .required(!for_update),
-                    );
-                }
-                field_command = field_command.subcommand(set);
-            }
-            if field_desc.has_default {
-                field_command = field_command.subcommand(Command::new("use-default"));
-            }
-            if field_desc.allow_unset {
-                field_command = field_command.subcommand(Command::new("unset"));
-            }
+                    if actionable.description.has_default() {
+                        field_command = field_command.subcommand(Command::new("use-default"));
+                    }
+                    if actionable.description.allow_unset() {
+                        field_command = field_command.subcommand(Command::new("unset"));
+                    }
 
-            field_command
-        }))
+                    field_command
+                }),
+        )
         .subcommand_required(true)
     }
 }
@@ -104,6 +108,9 @@ where
             "use-default" => ChangeVerb::UseDefault,
             _ => return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand)),
         };
+
+        dbg!(&verb);
+        dbg!(field_path.clone().collect::<Vec<_>>());
 
         let change = T::CongenChange::from_path_and_verb(field_path, verb)
             .expect("Failed to create change for path");

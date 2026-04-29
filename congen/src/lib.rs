@@ -11,7 +11,9 @@ pub use clap_bridge::CongenClap;
 
 /// Denotes that the operation is not supported by a [Configuration]
 #[derive(Debug, Error)]
-#[error("operation not supported by this configuration type")]
+#[error(
+    "operation not supported by this configuration type. Incorrect implementation of the Configuration trait"
+)]
 pub struct NotSupported;
 
 #[derive(Debug, Error)]
@@ -79,10 +81,6 @@ pub trait CongenChange: Sized + core::fmt::Debug {
     ///
     /// applying the result of this function should have no effect
     fn empty() -> Self;
-
-    fn unset() -> Result<Self, NotSupported> {
-        Err(NotSupported)
-    }
 
     fn default() -> Result<Self, NotSupported> {
         Err(NotSupported)
@@ -165,7 +163,7 @@ pub enum ChangeVerb {
 
 /// Descibes a [Configuration]
 // TODO internal
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Description {
     /// A composite type, e.g. structs or enums with values
     Composit(CompositDescription),
@@ -201,6 +199,14 @@ impl Description {
         }
     }
 
+    /// Whether or not the [Configuration] can be unset
+    pub fn allow_unset(&self) -> bool {
+        match self {
+            Description::Field(f) => f.allow_unset,
+            Description::Composit(c) => c.allow_unset,
+        }
+    }
+
     /// Returns true if a path is valid for the [Configuration]
     pub fn is_path_valid<'a, 's, P>(&'s self, mut path: P) -> bool
     where
@@ -221,6 +227,53 @@ impl Description {
             Description::Field(_field_description) => path.next().is_none(),
         }
     }
+
+    pub fn actionable_fields(&self) -> Vec<ActionableField> {
+        let composite = match self {
+            Description::Field(_field) => {
+                return vec![ActionableField {
+                    description: self.clone(),
+                    path: vec![],
+                }];
+            }
+            Description::Composit(comp) => comp,
+        };
+
+        let mut actionable = Vec::new();
+
+        for field in composite.fields.iter() {
+            match field {
+                Description::Field(field) => {
+                    actionable.push(ActionableField {
+                        description: field.clone().into(),
+                        path: vec![field.field_name],
+                    });
+                }
+                Description::Composit(composite) => {
+                    let fields = field.actionable_fields().into_iter().map(|mut field| {
+                        field.path.insert(0, composite.field_name);
+                        field
+                    });
+                    actionable.extend(fields);
+
+                    if composite.is_actionable() {
+                        actionable.push(ActionableField {
+                            description: field.clone().into(),
+                            path: vec![composite.field_name],
+                        });
+                    }
+                }
+            }
+        }
+
+        actionable
+    }
+}
+
+#[derive(Debug)]
+pub struct ActionableField {
+    description: Description,
+    path: Vec<&'static str>, // TODO change to VecDeque
 }
 
 impl From<CompositDescription> for Description {
@@ -235,7 +288,7 @@ impl From<FieldDescription> for Description {
 }
 
 /// A description for a composite type, e.g. structs or enums with values
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompositDescription {
     pub field_name: &'static str,
     pub type_name: Cow<'static, str>,
@@ -246,6 +299,7 @@ pub struct CompositDescription {
 
 impl CompositDescription {
     #[allow(missing_docs)]
+    // TODO inline this function
     pub fn as_option(self) -> Self {
         Self {
             allow_unset: true,
@@ -261,32 +315,14 @@ impl CompositDescription {
         }
     }
 
+    /// returns `true` if the description describes a field that is actionable
+    pub fn is_actionable(&self) -> bool {
+        self.has_default || self.allow_unset
+    }
+
     /// returns a reference to the fields [Description] if the field exists
     pub fn field<'d>(&'d self, name: &str) -> Option<&'d Description> {
         self.fields.iter().find(|f| f.name() == name)
-    }
-
-    /// Return an iterator over all terminal [FieldDescription] with their path.
-    // TODO I probably want something better that also gives me access to all
-    // [CompositeDescription]s  that allow for unset or use-default
-    pub fn fields(&self) -> impl Iterator<Item = (String, FieldDescription)> {
-        self.fields.iter().flat_map(move |child| match child {
-            Description::Field(field) => {
-                let mut full_name = String::new();
-                full_name.push_str(field.field_name);
-                std::iter::once((full_name, field.clone())).collect::<Vec<_>>()
-            }
-            Description::Composit(composit) => composit
-                .fields()
-                .map(|(name, field)| {
-                    let mut full_name = String::new();
-                    full_name.push_str(composit.field_name);
-                    full_name.push('.');
-                    full_name.push_str(&name);
-                    (full_name, field)
-                })
-                .collect::<Vec<_>>(),
-        })
     }
 }
 
@@ -325,6 +361,7 @@ impl FieldDescription {
 #[derive(Default, Debug)]
 pub enum OptionChange<T> {
     Apply(T),
+    Unset,
     #[default]
     NoChange,
 }
@@ -334,6 +371,7 @@ impl<T> OptionChange<T> {
     pub fn unwrap(self) -> T {
         match self {
             OptionChange::Apply(c) => c,
+            OptionChange::Unset => panic!("OptionChange is Unset but unwrap was called!"),
             OptionChange::NoChange => panic!("OptionChange is NoChange but unwrap was called!"),
         }
     }

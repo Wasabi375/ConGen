@@ -1,3 +1,4 @@
+use core::iter::empty;
 use std::{any::Any, mem::MaybeUninit, str::FromStr};
 
 use crate::{
@@ -17,8 +18,13 @@ where
         change: Self::CongenChange,
         default: Option<fn() -> Self>,
     ) {
-        let OptionChange::Apply(mut change) = change else {
-            return;
+        let mut change = match change {
+            OptionChange::Apply(change) => change,
+            OptionChange::Unset => {
+                *self = None;
+                return;
+            }
+            OptionChange::NoChange => return,
         };
         if self.is_none() {
             change = match change.unwrap_field() {
@@ -87,8 +93,14 @@ where
     }
 
     fn apply_change(&mut self, change: Self) {
-        if let OptionChange::Apply(change) = change {
-            *self = OptionChange::Apply(change);
+        match change {
+            OptionChange::Apply(change) => {
+                *self = OptionChange::Apply(change);
+            }
+            OptionChange::Unset => {
+                *self = OptionChange::Unset;
+            }
+            OptionChange::NoChange => (),
         }
     }
 
@@ -112,7 +124,7 @@ where
                 ChangeVerb::Unset => {
                     let mut path = path.peekable();
                     if path.peek().is_none() {
-                        Ok(Self::unset().map_err(|_| VerbError::UnsupportedVerb(verb))?)
+                        Ok(OptionChange::Unset)
                     } else {
                         Ok(OptionChange::Apply(C::from_path_and_verb(path, verb)?))
                     }
@@ -120,8 +132,8 @@ where
                 ChangeVerb::UseDefault => {
                     let mut path = path.peekable();
                     if path.peek().is_none() {
-                        Ok(<Self as CongenChange>::default()
-                            .map_err(|_| VerbError::UnsupportedVerb(verb))?)
+                        let inner_default = C::from_path_and_verb(empty(), verb)?;
+                        Ok(OptionChange::Apply(inner_default))
                     } else {
                         Ok(OptionChange::Apply(C::from_path_and_verb(path, verb)?))
                     }
@@ -142,18 +154,15 @@ where
                         Ok(OptionChange::Apply(*change))
                     }
                     ChangeVerb::SetFlag => Err(VerbError::UnsupportedVerb(verb)),
-                    ChangeVerb::Unset => Ok(OptionChange::Apply(C::unset()?)),
-                    ChangeVerb::UseDefault => {
-                        if !desc.has_default {
-                            return Err(VerbError::UnsupportedVerb(verb));
-                        }
-                        let default = C::default()
-                            .expect("use-default verb used, but default is not implemented");
-                        Ok(OptionChange::Apply(default))
-                    }
+                    ChangeVerb::Unset => Ok(OptionChange::Unset),
+                    ChangeVerb::UseDefault => Ok(OptionChange::Unset),
                 }
             }
         }
+    }
+
+    fn unwrap_field(self) -> Result<Self::Configuration, Self> {
+        Err(self)
     }
 }
 
@@ -171,9 +180,11 @@ fn downcast<F: 'static, T: 'static>(value: F) -> T {
         // Safety: created through MaybeUninit::new
         let value: &mut F = maybe.assume_init_mut();
         let value: &mut dyn Any = value;
-        let value: &mut T = value
-            .downcast_mut()
-            .expect("called downcast on incompatible types");
+        let value: &mut T = value.downcast_mut().expect(&format!(
+            "called downcast on incompatible types: {} => {}",
+            core::any::type_name::<F>(),
+            core::any::type_name::<T>()
+        ));
 
         // Safety: value is properly initialized as it is a reference to "maybe"
         //      this is a valid "move" because "maybe" is of type MaybeUninit and never accessed
@@ -277,7 +288,7 @@ impl Configuration for String {
             field_name,
             type_name: Self::type_name(),
             is_flag: false,
-            allow_unset: true,
+            allow_unset: false,
             has_default: false,
             cmd_value_hint: clap::ValueHint::Unknown,
         }

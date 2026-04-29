@@ -181,8 +181,8 @@ impl CongenField {
                     } else {
                         quote! {
                             Some(|| {
-                                Some(<#field_ty as congen::Configuration>::default()
-                                    .expect(&format!("field is marked as \"use_default\", but `default` is not implemented for {}", core::any::type_name::<#field_ty>())))
+                                <#field_ty as congen::Configuration>::default()
+                                    .expect(&format!("field is marked as \"use_default\", but `default` is not implemented for {}", core::any::type_name::<#field_ty>()))
                             })
                         }
                     }
