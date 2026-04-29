@@ -5,7 +5,8 @@ use congen::{CompositDescription, Configuration, Description};
 
 // TODO how do I want to handle Vec and or HashMap?
 // TODO how do I want to handle transparent wrapper types like Box, Arc, Rc, etc?
-// TODO do I want to support additional enum types? If so how?
+
+// TODO remove Debug implementations from generated structs
 
 #[derive(congen::Configuration, Debug)]
 struct Config {
@@ -17,7 +18,7 @@ struct Config {
     c: bool,
 
     sub: SubConfig,
-    // opt: Option<SubConfig>,
+    opt: Option<SubConfig>,
 }
 
 #[derive(congen::Configuration, Debug)]
@@ -38,8 +39,12 @@ fn main() {
     // config c unset
     // config sub.d set 5
     // config sub.e set 42
+    // config opt.e use-default
     // config opt.d set 2
+    // config opt.d use-default
+    // config opt.d unset
     // config opt unset
+    // config opt use-default
 
     let args = cli_test::TestCli::parse();
     match args.command {
@@ -51,20 +56,13 @@ fn main() {
                 b2: "test".to_string(),
                 c: false,
                 sub: SubConfig { d: 2, e: None },
-                // opt: None,
+                opt: None,
             };
-            config.apply_change(congen_clap.into_change());
+            config.apply_change(dbg!(congen_clap.into_change()));
 
-            println!("{config:?}",)
+            println!("{config:#?}",)
         }
     }
-}
-
-mod to_generate {
-
-    // TODO I probs need to generate
-    // impl CongenChange for Option<SubConfigChange>
-    // to handle optional subconfigs
 }
 
 mod cli_test {

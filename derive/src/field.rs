@@ -1,4 +1,5 @@
-use quote::{ToTokens, format_ident};
+use proc_macro2::TokenStream;
+use quote::{ToTokens, format_ident, quote};
 use syn::{
     Expr, Field, GenericArgument, Ident, Meta, PathArguments, Token, Type, parse::Parse, parse2,
     punctuated::Punctuated,
@@ -53,6 +54,7 @@ impl ToTokens for AttributeParam {
 #[derive(Default)]
 pub struct CongenAttribute {
     pub default: Option<CongenDefault>,
+    pub inner_default: Option<Expr>,
 }
 
 pub enum CongenDefault {
@@ -65,6 +67,7 @@ impl Parse for CongenAttribute {
         let args = Punctuated::<AttributeParam, Token![,]>::parse_terminated(input)?;
 
         let mut default = None;
+        let mut inner_default = None;
 
         for arg in args {
             match arg.ident().to_string().as_str() {
@@ -81,6 +84,23 @@ impl Parse for CongenAttribute {
                         AttributeParam::NameValue { value, .. } => CongenDefault::Expr(value),
                     });
                 }
+                "inner-default" => {
+                    if inner_default.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            arg,
+                            "\"inner_default\" should only be specified once in `congen` attribute",
+                        ));
+                    }
+
+                    let AttributeParam::NameValue { value: expr, .. } = arg else {
+                        return Err(syn::Error::new_spanned(
+                            arg,
+                            "\"inner_default\" requires expression as argument",
+                        ));
+                    };
+
+                    inner_default = Some(expr);
+                }
                 _ => {
                     return Err(syn::Error::new_spanned(
                         arg,
@@ -90,7 +110,10 @@ impl Parse for CongenAttribute {
             }
         }
 
-        Ok(CongenAttribute { default })
+        Ok(CongenAttribute {
+            default,
+            inner_default,
+        })
     }
 }
 
@@ -126,6 +149,60 @@ impl CongenField {
             attr,
             field,
             option_type,
+        }
+    }
+
+    pub fn derive_default_constructor(&self) -> TokenStream {
+        if let Some(inner_default) = self.attr.inner_default.as_ref() {
+            if self.option_type.is_none() {
+                return syn::Error::new_spanned(
+                    &self.field,
+                    "\"inner_default\" parameter is only allowed on optional fields",
+                )
+                .into_compile_error();
+            }
+            quote! {
+                Some(|| { Some(#inner_default) })
+            }
+        } else if let Some(default) = self.attr.default.as_ref() {
+            match default {
+                CongenDefault::Expr(expr) => quote! { Some(|| { #expr }) },
+                CongenDefault::UseDefault => {
+                    let field_ty = &self.field.ty;
+
+                    if let Some(option_type) = self.option_type.as_ref() {
+                        quote! {
+                            Some(|| {
+                                <#option_type as congen::Configuration>::default().map(|d| Some(d))
+                                    .or_else(|_| { <#field_ty as congen::Configuration>::default() })
+                                    .expect(&format!("field is marked as \"use_default\", but `default` is not implemented for {}", core::any::type_name::<#field_ty>()))
+                            })
+                        }
+                    } else {
+                        quote! {
+                            Some(|| {
+                                Some(<#field_ty as congen::Configuration>::default()
+                                    .expect(&format!("field is marked as \"use_default\", but `default` is not implemented for {}", core::any::type_name::<#field_ty>())))
+                            })
+                        }
+                    }
+                }
+            }
+        } else {
+            if let Some(option_type) = self.option_type.as_ref() {
+                let field_ty = &self.field.ty;
+                quote! {
+                    Some(|| {
+                        <#option_type as congen::Configuration>::default().map(|d| Some(d))
+                            .or_else(|_| { <#field_ty as congen::Configuration>::default() })
+                            .expect(&format!("field is optional, but `default` is not implemented for {}", core::any::type_name::<#field_ty>()))
+                    })
+                }
+            } else {
+                quote! {
+                    None
+                }
+            }
         }
     }
 }

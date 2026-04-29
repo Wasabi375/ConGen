@@ -20,12 +20,25 @@ pub struct ParseError(pub String);
 
 // TODO split into public and internal trait, only apply_change should be called by consumers of
 // this lib while the rest of the functions are used internally to implement the interface
-pub trait Configuration: Sized {
+pub trait Configuration: Sized + core::fmt::Debug {
     /// The [CongenChange] type associated with this [Configuration]
     type CongenChange: crate::CongenChange;
 
     /// apply change to `self`
-    fn apply_change(&mut self, change: Self::CongenChange);
+    fn apply_change(&mut self, change: Self::CongenChange) {
+        Self::apply_change_with_default(self, change, None); // TODO is None a sensible default
+    }
+
+    /// apply change to `self`
+    ///
+    /// providing a `default` value in case `Self = Option<Configuration>` and
+    /// `self == None`. In this case if `default` is provided it must return `Some(default)`.
+    // TODO internal
+    fn apply_change_with_default(
+        &mut self,
+        change: Self::CongenChange,
+        default: Option<fn() -> Self>,
+    );
 
     /// Get a description of this [Configuration]
     fn description(field_name: &'static str) -> Description;
@@ -42,7 +55,7 @@ pub trait Configuration: Sized {
     /// string.
     /// Otherwise it should either return `Ok(Ok(parsed_value))` or `Ok(Err(parse_error))`
     // TODO internal
-    fn parse(_input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+    fn parse(_input: &str) -> Result<Result<Self::CongenChange, ParseError>, NotSupported> {
         Err(NotSupported)
     }
 
@@ -59,11 +72,25 @@ pub trait Configuration: Sized {
     }
 }
 
-pub trait CongenChange: Sized {
+pub trait CongenChange: Sized + core::fmt::Debug {
+    type Configuration: crate::Configuration;
+
     /// An empty change.
     ///
     /// applying the result of this function should have no effect
     fn empty() -> Self;
+
+    fn unset() -> Result<Self, NotSupported> {
+        Err(NotSupported)
+    }
+
+    fn default() -> Result<Self, NotSupported> {
+        Err(NotSupported)
+    }
+
+    fn unwrap_field(self) -> Result<Self::Configuration, Self> {
+        Err(self)
+    }
 
     /// combine 2 changes.
     ///
@@ -295,7 +322,7 @@ impl FieldDescription {
 
 /// [CongenChange] for [Option]
 // TODO internal
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub enum OptionChange<T> {
     Apply(T),
     #[default]
