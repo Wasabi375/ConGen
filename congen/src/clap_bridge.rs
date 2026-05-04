@@ -96,14 +96,12 @@ where
         };
 
         let verb = match verb_name {
-            "set" => {
-                let value: Option<String> = verb_cmd.get_one("value").cloned();
-                if let Some(value) = value {
-                    ChangeVerb::Set(value)
-                } else {
-                    ChangeVerb::SetFlag
-                }
-            }
+            "set" => match verb_cmd.try_get_one("value").map(|value| value.cloned()) {
+                Ok(Some(value)) => ChangeVerb::Set(value),
+                Err(clap::parser::MatchesError::UnknownArgument { .. }) => ChangeVerb::SetFlag,
+                Ok(None) => return Err(clap::Error::new(clap::error::ErrorKind::TooFewValues)),
+                Err(_err) => return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue)),
+            },
             "unset" => ChangeVerb::Unset,
             "use-default" => ChangeVerb::UseDefault,
             _ => return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand)),

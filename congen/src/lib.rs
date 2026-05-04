@@ -97,12 +97,12 @@ pub trait CongenChange: Sized + core::fmt::Debug {
     /// given a `configuration: Self::Configuration` applying the result of
     /// `change_a.apply_change(change_b)` should be the same as applying `change_a` and
     /// then `change_b`, e.g.
-    /// ```ignore
+    /// ```compile_fail
     /// let combined = change_a.apply_change(change_b);
     /// configuration.apply_change(combined)
     /// ```
     /// should be the same as
-    /// ```ignore
+    /// ```compile_fail
     /// configuration.apply_change(change_a);
     /// configuration.apply_change(change_b);
     /// ```
