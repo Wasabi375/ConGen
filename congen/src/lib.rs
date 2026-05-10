@@ -3,7 +3,7 @@ mod impls;
 
 pub use congen_derive::Configuration;
 
-use std::{any::Any, borrow::Cow};
+use std::{any::Any, borrow::Cow, collections::VecDeque};
 
 use thiserror::Error;
 
@@ -233,7 +233,7 @@ impl Description {
             Description::Field(_field) => {
                 return vec![ActionableField {
                     description: self.clone(),
-                    path: vec![],
+                    path: VecDeque::new(),
                 }];
             }
             Description::Composit(comp) => comp,
@@ -246,12 +246,12 @@ impl Description {
                 Description::Field(field) => {
                     actionable.push(ActionableField {
                         description: field.clone().into(),
-                        path: vec![field.field_name],
+                        path: VecDeque::from([field.field_name]),
                     });
                 }
                 Description::Composit(composite) => {
                     let fields = field.actionable_fields().into_iter().map(|mut field| {
-                        field.path.insert(0, composite.field_name);
+                        field.path.push_front(composite.field_name);
                         field
                     });
                     actionable.extend(fields);
@@ -259,7 +259,7 @@ impl Description {
                     if composite.is_actionable() {
                         actionable.push(ActionableField {
                             description: field.clone().into(),
-                            path: vec![composite.field_name],
+                            path: VecDeque::from([composite.field_name]),
                         });
                     }
                 }
@@ -273,7 +273,7 @@ impl Description {
 #[derive(Debug)]
 pub struct ActionableField {
     description: Description,
-    path: Vec<&'static str>, // TODO change to VecDeque
+    path: VecDeque<&'static str>,
 }
 
 impl From<CompositDescription> for Description {

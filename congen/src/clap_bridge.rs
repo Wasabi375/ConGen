@@ -28,9 +28,9 @@ impl<T: Configuration> CongenClap<T> {
         cmd.subcommands(
             T::description("__clap")
                 .actionable_fields()
-                .iter()
-                .map(|actionable| {
-                    let field_name = actionable.path.join(".");
+                .into_iter()
+                .map(|mut actionable| {
+                    let field_name = actionable.path.make_contiguous().join(".");
                     let mut field_command =
                         Command::new(field_name).subcommand_required(!for_update);
 
