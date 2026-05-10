@@ -1,6 +1,10 @@
+mod value_enum;
+
 use clap::{Arg, Args, Command, FromArgMatches};
 
 use crate::{ChangeVerb, Configuration, CongenChange, Description};
+
+pub use value_enum::ValueEnumConfiguration;
 
 /// provides a [clap::Args] implementation for a [Configuration] for clap-derive.
 ///

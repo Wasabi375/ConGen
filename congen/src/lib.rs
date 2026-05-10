@@ -7,7 +7,7 @@ use std::{any::Any, borrow::Cow, collections::VecDeque};
 
 use thiserror::Error;
 
-pub use clap_bridge::CongenClap;
+pub use clap_bridge::{CongenClap, ValueEnumConfiguration};
 
 /// Denotes that the operation is not supported by a [Configuration]
 #[derive(Debug, Error)]
@@ -28,7 +28,7 @@ pub trait Configuration: Sized + core::fmt::Debug {
 
     /// apply change to `self`
     fn apply_change(&mut self, change: Self::CongenChange) {
-        Self::apply_change_with_default(self, change, None); // TODO is None a sensible default
+        Self::apply_change_with_default(self, change, None);
     }
 
     /// apply change to `self`
