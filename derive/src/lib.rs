@@ -25,7 +25,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let vis = &input.vis;
     let change_type = format_ident!("{}Change", input.ident);
 
-    let change_type_impl = derive_change_type(&input.ident, &change_type, &vis, &fields);
+    let change_type_impl = derive_change_type(&input.ident, &change_type, vis, &fields);
     let configuration_impl = derive_configuration_impl(&input.ident, &change_type, &fields);
     let congen_change_impl = derive_congen_change(&input.ident, &change_type, &fields);
 
@@ -99,29 +99,35 @@ fn derive_configuration_impl(
         }
     });
 
-    let field_defaults = fields.iter().map(|field| {
-        let ident = &field
-            .field
-            .ident
-            .as_ref()
-            .expect("Tuple structs not supported");
-        let ty = &field.field.ty;
+    let mut has_default = true;
 
-        let Some(default) = field.attr.default.as_ref() else {
-            return quote! {
-                #ident: { return Err(congen::NotSupported) }
+    let field_defaults = fields
+        .iter()
+        .map(|field| {
+            let ident = &field
+                .field
+                .ident
+                .as_ref()
+                .expect("Tuple structs not supported");
+            let ty = &field.field.ty;
+
+            let Some(default) = field.attr.default.as_ref() else {
+                has_default = false;
+                return quote! {
+                    #ident: { return Err(congen::NotSupported) }
+                };
             };
-        };
 
-        match default {
-            field::CongenDefault::UseDefault => quote! {
-                #ident: <#ty as congen::Configuration>::default()?
-            },
-            field::CongenDefault::Expr(expr) => quote! {
-                #ident: #expr
-            },
-        }
-    });
+            match default {
+                field::CongenDefault::UseDefault => quote! {
+                    #ident: <#ty as congen::Configuration>::default()?
+                },
+                field::CongenDefault::Expr(expr) => quote! {
+                    #ident: #expr
+                },
+            }
+        })
+        .collect::<Vec<_>>();
 
     quote! {
         impl congen::Configuration for #ty {
@@ -142,7 +148,7 @@ fn derive_configuration_impl(
                         field_name,
                         type_name: Self::type_name(),
                         fields: children,
-                        has_default: false, // TODO how to fill this?
+                        has_default: #has_default,
                         allow_unset: false,
                     }
                 )
@@ -288,8 +294,7 @@ fn derive_congen_change(
                             congen::ChangeVerb::Set(_) | congen::ChangeVerb::SetAny(_)
                                 => Err(congen::VerbError::UnsupportedVerb(verb)),
                             congen::ChangeVerb::SetFlag | congen::ChangeVerb::Unset => {
-                                // TODO
-                                eprintln!("set-flag and unset are not yet implemented for derived congens");
+                                eprintln!("set-flag and unset are not supported by derived congens");
                                 Err(congen::VerbError::UnsupportedVerb(verb))
                             },
                             congen::ChangeVerb::UseDefault => Ok(<Self as congen::CongenChange>::default()?),

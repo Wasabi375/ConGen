@@ -2,8 +2,8 @@ use core::iter::empty;
 use std::{any::Any, mem::MaybeUninit, str::FromStr};
 
 use crate::{
-    ChangeVerb, Configuration, CongenChange, Description, FieldDescription, NotSupported,
-    OptionChange, ParseError, VerbError,
+    ChangeVerb, CompositDescription, Configuration, CongenChange, Description, FieldDescription,
+    NotSupported, OptionChange, ParseError, VerbError,
 };
 
 impl<T> Configuration for Option<T>
@@ -54,7 +54,10 @@ where
 
     fn description(field_name: &'static str) -> Description {
         match T::description(field_name) {
-            Description::Composit(composit) => Description::Composit(composit.as_option()),
+            Description::Composit(composit) => Description::Composit(CompositDescription {
+                allow_unset: true,
+                ..composit
+            }),
             Description::Field(field) => Description::Field(field.as_option()),
         }
     }
@@ -179,11 +182,13 @@ fn downcast<F: 'static, T: 'static>(value: F) -> T {
         // Safety: created through MaybeUninit::new
         let value: &mut F = maybe.assume_init_mut();
         let value: &mut dyn Any = value;
-        let value: &mut T = value.downcast_mut().expect(&format!(
-            "called downcast on incompatible types: {} => {}",
-            core::any::type_name::<F>(),
-            core::any::type_name::<T>()
-        ));
+        let value: &mut T = value.downcast_mut().unwrap_or_else(|| {
+            panic!(
+                "called downcast on incompatible types: {} => {}",
+                core::any::type_name::<F>(),
+                core::any::type_name::<T>()
+            )
+        });
 
         // Safety: value is properly initialized as it is a reference to "maybe"
         //      this is a valid "move" because "maybe" is of type MaybeUninit and never accessed

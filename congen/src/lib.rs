@@ -257,7 +257,7 @@ impl Description {
 
                     if composite.is_actionable() {
                         actionable.push(ActionableField {
-                            description: field.clone().into(),
+                            description: field.clone(),
                             path: VecDeque::from([composite.field_name]),
                         });
                     }
@@ -297,15 +297,6 @@ pub struct CompositDescription {
 }
 
 impl CompositDescription {
-    #[allow(missing_docs)]
-    // TODO inline this function
-    pub fn as_option(self) -> Self {
-        Self {
-            allow_unset: true,
-            ..self
-        }
-    }
-
     #[allow(missing_docs)]
     pub fn with_default(self) -> Self {
         Self {
