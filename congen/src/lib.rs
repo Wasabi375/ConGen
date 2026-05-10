@@ -1,7 +1,9 @@
 mod clap_bridge;
 mod impls;
 
-pub use congen_derive::Configuration;
+extern crate self as congen;
+
+pub use congen_derive::{Configuration, ValueEnumConfiguration};
 
 use std::{any::Any, borrow::Cow, collections::VecDeque};
 

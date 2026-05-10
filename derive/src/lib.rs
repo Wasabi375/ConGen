@@ -1,10 +1,28 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Ident, ItemStruct, Visibility, parse_macro_input};
+use syn::{DeriveInput, Ident, ItemStruct, Visibility, parse_macro_input};
 
 use crate::field::{CongenDefault, CongenField};
 
 mod field;
+
+#[proc_macro_derive(ValueEnumConfiguration)]
+pub fn value_enum_configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let ty = &input.ident;
+
+    if !matches!(input.data, syn::Data::Enum(_)) {
+        return quote! { compile_error!("ValueEnumConfiguration can only be derived for enums") }
+            .into();
+    }
+
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics congen::ValueEnumConfiguration for #ty #ty_generics #where_clause {}
+    }
+    .into()
+}
 
 #[proc_macro_derive(Configuration, attributes(congen))]
 pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

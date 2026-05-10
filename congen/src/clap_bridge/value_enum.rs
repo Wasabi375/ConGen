@@ -94,13 +94,13 @@ mod tests {
 
     use super::*;
 
-    #[derive(clap::ValueEnum, Debug, Clone, PartialEq, Eq)]
+    #[derive(
+        clap::ValueEnum, congen_derive::ValueEnumConfiguration, Debug, Clone, PartialEq, Eq,
+    )]
     enum Mode {
         Fast,
         Safe,
     }
-
-    impl ValueEnumConfiguration for Mode {}
 
     #[test]
     fn value_enum_description_is_field() {
