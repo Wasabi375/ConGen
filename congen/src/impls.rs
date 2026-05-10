@@ -63,17 +63,6 @@ where
         Ok(None)
     }
 
-    // TODO move fn into CongenChange?
-    fn parse(input: &str) -> Result<Result<Self::CongenChange, ParseError>, NotSupported> {
-        // NOTE: we parse Option<T> just like T and assume Some. There is no way to parse
-        // None.
-        match T::parse(input) {
-            Ok(Ok(inner)) => Ok(Ok(OptionChange::Apply(inner))),
-            Ok(Err(parse_err)) => Ok(Err(parse_err)),
-            Err(_) => Err(NotSupported),
-        }
-    }
-
     fn type_name() -> std::borrow::Cow<'static, str> {
         let mut name = T::type_name();
         name.to_mut().push('?');
@@ -90,6 +79,16 @@ where
 
     fn empty() -> Self {
         OptionChange::NoChange
+    }
+
+    fn parse(input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+        // NOTE: we parse Option<T> just like T and assume Some. There is no way to parse
+        // None.
+        match C::parse(input) {
+            Ok(Ok(inner)) => Ok(Ok(OptionChange::Apply(inner))),
+            Ok(Err(parse_err)) => Ok(Err(parse_err)),
+            Err(_) => Err(NotSupported),
+        }
     }
 
     fn apply_change(&mut self, change: Self) {
@@ -146,7 +145,7 @@ where
 
                 match verb {
                     ChangeVerb::Set(value) => {
-                        let change = Self::Configuration::parse(&value)??;
+                        let change = Self::parse(&value)??;
                         Ok(downcast(change))
                     }
                     ChangeVerb::SetAny(value) => {
@@ -222,12 +221,6 @@ impl Configuration for bool {
         Ok(false)
     }
 
-    fn parse(input: &str) -> Result<Result<Self::CongenChange, crate::ParseError>, NotSupported> {
-        match bool::from_str(input) {
-            Ok(value) => Ok(Ok(Some(value))),
-            Err(e) => Ok(Err(ParseError(e.to_string()))),
-        }
-    }
     fn type_name() -> std::borrow::Cow<'static, str> {
         std::any::type_name::<Self>().into()
     }
@@ -238,6 +231,13 @@ impl CongenChange for Option<bool> {
 
     fn empty() -> Self {
         None
+    }
+
+    fn parse(input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+        match bool::from_str(input) {
+            Ok(value) => Ok(Ok(Some(value))),
+            Err(e) => Ok(Err(ParseError(e.to_string()))),
+        }
     }
 
     fn apply_change(&mut self, change: Self) {
@@ -255,7 +255,7 @@ impl CongenChange for Option<bool> {
             "OptionChange<Option<T>> implies this is a field"
         );
         match verb {
-            ChangeVerb::Set(unparesd) => Ok(Self::Configuration::parse(&unparesd)??),
+            ChangeVerb::Set(unparesd) => Ok(Self::parse(&unparesd)??),
             ChangeVerb::SetAny(value) => Ok(Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
@@ -294,10 +294,6 @@ impl Configuration for String {
         }
         .into()
     }
-
-    fn parse(input: &str) -> Result<Result<Self::CongenChange, crate::ParseError>, NotSupported> {
-        Ok(Ok(Some(input.to_owned())))
-    }
 }
 
 impl CongenChange for Option<String> {
@@ -305,6 +301,10 @@ impl CongenChange for Option<String> {
 
     fn empty() -> Self {
         None
+    }
+
+    fn parse(input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+        Ok(Ok(Some(input.to_owned())))
     }
 
     fn apply_change(&mut self, change: Self) {
@@ -322,7 +322,7 @@ impl CongenChange for Option<String> {
             "OptionChange<Option<T>> implies this is a field"
         );
         match verb {
-            ChangeVerb::Set(unparesd) => Ok(Self::Configuration::parse(&unparesd)??),
+            ChangeVerb::Set(unparesd) => Ok(Self::parse(&unparesd)??),
             ChangeVerb::SetAny(value) => Ok(Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
@@ -361,13 +361,6 @@ impl Configuration for u32 {
         }
         .into()
     }
-
-    fn parse(input: &str) -> Result<Result<Self::CongenChange, crate::ParseError>, NotSupported> {
-        match u32::from_str(input) {
-            Ok(value) => Ok(Ok(Some(value))),
-            Err(e) => Ok(Err(ParseError(e.to_string()))),
-        }
-    }
 }
 
 impl CongenChange for Option<u32> {
@@ -375,6 +368,13 @@ impl CongenChange for Option<u32> {
 
     fn empty() -> Self {
         None
+    }
+
+    fn parse(input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
+        match u32::from_str(input) {
+            Ok(value) => Ok(Ok(Some(value))),
+            Err(e) => Ok(Err(ParseError(e.to_string()))),
+        }
     }
 
     fn apply_change(&mut self, change: Self) {
@@ -392,7 +392,7 @@ impl CongenChange for Option<u32> {
             "OptionChange<Option<T>> implies this is a field"
         );
         match verb {
-            ChangeVerb::Set(unparesd) => Ok(Self::Configuration::parse(&unparesd)??),
+            ChangeVerb::Set(unparesd) => Ok(Self::parse(&unparesd)??),
             ChangeVerb::SetAny(value) => Ok(Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),

@@ -51,16 +51,6 @@ pub trait Configuration: Sized + core::fmt::Debug {
         Err(NotSupported)
     }
 
-    /// Parses a simple field value.
-    ///
-    /// Returns `Err(NotSupported)` for complex structs that can't be directly parsed from a
-    /// string.
-    /// Otherwise it should either return `Ok(Ok(parsed_value))` or `Ok(Err(parse_error))`
-    // TODO internal
-    fn parse(_input: &str) -> Result<Result<Self::CongenChange, ParseError>, NotSupported> {
-        Err(NotSupported)
-    }
-
     // TODO verify function that can check that parsed values are within bounds, etc.
     //  Bounds check should be implemented on the composite. Fields can check during parse.
     //  However a composite might have additional requirements, e.g u32 must be greater than 10
@@ -83,6 +73,15 @@ pub trait CongenChange: Sized + core::fmt::Debug {
     fn empty() -> Self;
 
     fn default() -> Result<Self, NotSupported> {
+        Err(NotSupported)
+    }
+
+    /// Parses a simple field value.
+    ///
+    /// Returns `Err(NotSupported)` for complex structs that can't be directly parsed from a
+    /// string.
+    /// Otherwise it should either return `Ok(Ok(parsed_value))` or `Ok(Err(parse_error))`
+    fn parse(_input: &str) -> Result<Result<Self, ParseError>, NotSupported> {
         Err(NotSupported)
     }
 
@@ -147,7 +146,7 @@ pub enum VerbError {
 // TODO internal
 #[derive(Debug)]
 pub enum ChangeVerb {
-    /// Set the change to [Configuration::parse] of the value
+    /// Set the change to [CongenChange::parse] of the value
     Set(String),
     /// Enable the flag in the change
     SetFlag,
