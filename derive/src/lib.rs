@@ -273,9 +273,10 @@ fn derive_congen_change(
             fn default() -> Result<Self, congen::NotSupported> {
                 fn map_err(err: congen::VerbError) -> congen::NotSupported {
                     match err {
-                        congen::VerbError::InvalidPath | congen::VerbError::ParseError(_) | congen::VerbError::DowncastFailed =>
+                        congen::VerbError::InvalidPath | congen::VerbError::ParseError(_) | congen::VerbError::DowncastFailed | congen::VerbError::InvalidDescription =>
                             panic!("unexpected error while creating default CongenChange: {err}"),
-                        congen::VerbError::NotSupported(_) | congen::VerbError::UnsupportedVerb(_) => congen::NotSupported
+                        congen::VerbError::NotSupported(_) | congen::VerbError::UnsupportedVerb(_) => congen::NotSupported,
+                        err => panic!("unknown error while creating default CongenChange: {err}"),
                     }
                 }
 

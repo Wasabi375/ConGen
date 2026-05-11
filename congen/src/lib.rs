@@ -1,10 +1,16 @@
 pub mod clap_bridge;
+pub mod lists;
 pub mod option;
 pub mod primitives;
 
 pub use congen_derive::{Configuration, ValueEnumConfiguration};
 
-use std::{any::Any, borrow::Cow, collections::VecDeque, mem::MaybeUninit};
+use std::{
+    any::{Any, TypeId},
+    borrow::Cow,
+    collections::VecDeque,
+    mem::MaybeUninit,
+};
 
 use thiserror::Error;
 
@@ -127,6 +133,7 @@ pub trait CongenChange: Sized + core::fmt::Debug {
 }
 
 #[allow(missing_docs)]
+#[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum VerbError {
     #[error("invalid path: the specified configuration path does not exist")]
@@ -139,6 +146,8 @@ pub enum VerbError {
     ParseError(#[from] ParseError),
     #[error("failed to downcast value to the expected type")]
     DowncastFailed,
+    #[error("the description is in an invalid state")]
+    InvalidDescription,
 }
 
 /// A [ChangeVerb] is used to create a [CongenChange] based on a path.
@@ -169,6 +178,8 @@ pub enum Description {
     Composit(CompositDescription),
     /// A simple parsable field, e.g. String, int, anything parsable from the command line
     Field(FieldDescription),
+    // TODO document
+    List(ListDescription),
 }
 
 impl Description {
@@ -180,6 +191,7 @@ impl Description {
         match self {
             Description::Composit(composit) => Self::Composit(composit.with_default()),
             Description::Field(field) => Self::Field(field.with_default()),
+            Description::List(list) => Self::List(list.with_default()),
         }
     }
 
@@ -188,6 +200,7 @@ impl Description {
         match self {
             Description::Field(f) => f.field_name,
             Description::Composit(c) => c.field_name,
+            Description::List(l) => l.field_name,
         }
     }
 
@@ -196,6 +209,7 @@ impl Description {
         match self {
             Description::Field(f) => f.has_default,
             Description::Composit(c) => c.has_default,
+            Description::List(l) => l.has_default,
         }
     }
 
@@ -204,6 +218,7 @@ impl Description {
         match self {
             Description::Field(f) => f.allow_unset,
             Description::Composit(c) => c.allow_unset,
+            Description::List(_) => false,
         }
     }
 
@@ -224,7 +239,7 @@ impl Description {
 
                 next_field.is_path_valid(path)
             }
-            Description::Field(_field_description) => path.next().is_none(),
+            Description::Field(_) | Description::List(_) => path.next().is_none(),
         }
     }
 
@@ -237,6 +252,7 @@ impl Description {
                 }];
             }
             Description::Composit(comp) => comp,
+            Description::List(_list) => todo!(),
         };
 
         let mut actionable = Vec::new();
@@ -263,6 +279,7 @@ impl Description {
                         });
                     }
                 }
+                Description::List(_list) => todo!(),
             }
         }
 
@@ -284,6 +301,11 @@ impl From<CompositDescription> for Description {
 impl From<FieldDescription> for Description {
     fn from(value: FieldDescription) -> Self {
         Description::Field(value)
+    }
+}
+impl From<ListDescription> for Description {
+    fn from(value: ListDescription) -> Self {
+        Description::List(value)
     }
 }
 
@@ -330,15 +352,6 @@ pub struct FieldDescription {
 
 impl FieldDescription {
     #[allow(missing_docs)]
-    pub fn as_option(self) -> Self {
-        Self {
-            is_flag: false,
-            allow_unset: true,
-            ..self
-        }
-    }
-
-    #[allow(missing_docs)]
     pub fn with_default(self) -> Self {
         Self {
             has_default: true,
@@ -347,14 +360,33 @@ impl FieldDescription {
     }
 }
 
-/// A helper to safely downcast types
+#[derive(Debug, Clone)]
+pub struct ListDescription {
+    pub field_name: &'static str,
+    pub type_name: Cow<'static, str>,
+    pub inner_desc: Box<Description>,
+    pub has_default: bool,
+}
+
+impl ListDescription {
+    pub fn with_default(self) -> Self {
+        Self {
+            has_default: true,
+            ..self
+        }
+    }
+}
+
+/// A helper to safely cast between 2 identical generic types
 ///
-/// this will panic if the downcast is not safe.
+/// this will panic if `T` and `F` are not of the same type.
 /// Used to handle generics, where we know `T` and `F` should be of the same type,
 /// but can't express this in the type system, e.g. circular type between `Configuration` and
 /// `CongenChange`:
 /// `<C as Configuration>::CongenChange::Configuration == C`
-pub(crate) fn downcast<F: 'static, T: 'static>(value: F) -> T {
+pub(crate) fn self_cast<F: 'static, T: 'static>(value: F) -> T {
+    assert_eq!(TypeId::of::<F>(), TypeId::of::<T>());
+
     let mut maybe = MaybeUninit::new(value);
 
     unsafe {

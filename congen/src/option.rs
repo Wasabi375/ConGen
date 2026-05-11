@@ -1,8 +1,8 @@
 use core::iter::empty;
 
 use crate::{
-    ChangeVerb, CompositDescription, Configuration, CongenChange, Description, NotSupported,
-    ParseError, VerbError, downcast,
+    ChangeVerb, CompositDescription, Configuration, CongenChange, Description, FieldDescription,
+    NotSupported, ParseError, VerbError, self_cast,
 };
 
 /// [CongenChange] for [Option]
@@ -48,7 +48,7 @@ where
         if self.is_none() {
             change = match change.unwrap_field() {
                 Ok(unwrapped) => {
-                    *self = Some(downcast(unwrapped));
+                    *self = Some(self_cast(unwrapped));
                     return;
                 }
                 Err(change) => change,
@@ -75,9 +75,16 @@ where
         match T::description(field_name) {
             Description::Composit(composit) => Description::Composit(CompositDescription {
                 allow_unset: true,
+                type_name: Self::type_name(),
                 ..composit
             }),
-            Description::Field(field) => Description::Field(field.as_option()),
+            Description::Field(field) => Description::Field(FieldDescription {
+                is_flag: false,
+                allow_unset: true,
+                type_name: Self::type_name(),
+                ..field
+            }),
+            Description::List(_) => panic!("Option<List> is not supported"),
         }
     }
 
@@ -168,7 +175,7 @@ where
                 match verb {
                     ChangeVerb::Set(value) => {
                         let change = Self::parse(&value)??;
-                        Ok(downcast(change))
+                        Ok(self_cast(change))
                     }
                     ChangeVerb::SetAny(value) => {
                         let change = value.downcast().map_err(|_| VerbError::DowncastFailed)?;
@@ -179,6 +186,7 @@ where
                     ChangeVerb::UseDefault => Ok(OptionChange::Unset),
                 }
             }
+            Description::List(_) => Err(VerbError::InvalidDescription),
         }
     }
 

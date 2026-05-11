@@ -1,0 +1,8 @@
+[package]
+name = "lists"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+congen.workspace = true
+clap = { version = "4.5", features = ["string", "derive" ] }
