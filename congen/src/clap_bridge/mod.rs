@@ -38,16 +38,46 @@ impl<T: Configuration> CongenClap<T> {
                     let mut field_command =
                         Command::new(field_name).subcommand_required(!for_update);
 
-                    if let Description::Field(field) = &actionable.description {
-                        let mut set = Command::new("set");
-                        if !field.is_flag {
-                            set = set.arg(
-                                Arg::new("value")
-                                    .value_name(field.type_name.to_uppercase())
-                                    .required(!for_update),
-                            );
+                    match &actionable.description {
+                        Description::Field(field) => {
+                            let mut set = Command::new("set");
+                            if !field.is_flag {
+                                set = set.arg(
+                                    Arg::new("value")
+                                        .value_name(field.type_name.to_uppercase())
+                                        .required(!for_update),
+                                );
+                            }
+                            field_command = field_command.subcommand(set);
                         }
-                        field_command = field_command.subcommand(set);
+                        Description::List(list) => {
+                            let mut key_arg =
+                                Arg::new("key").value_name("AT").required(!for_update);
+                            if list.key_is_int {
+                                key_arg = key_arg.value_parser(clap::value_parser!(usize));
+                            }
+
+                            // append, update, remove, empty
+                            field_command = field_command
+                                .subcommand(Command::new("empty"))
+                                .subcommand(Command::new("remove").arg(key_arg.clone()));
+
+                            match list.inner_desc.as_ref() {
+                                Description::Field(inner_field) => {
+                                    let value_arg = Arg::new("value")
+                                        .value_name(inner_field.type_name.to_uppercase())
+                                        .required(!for_update);
+                                    field_command = field_command
+                                        .subcommand(Command::new("append").arg(value_arg.clone()))
+                                        .subcommand(
+                                            Command::new("update").arg(key_arg).arg(value_arg),
+                                        );
+                                }
+                                Description::Composit(_inner_comp) => todo!(),
+                                Description::List(_inner_list) => todo!(),
+                            }
+                        }
+                        _ => (),
                     }
 
                     if actionable.description.has_default() {

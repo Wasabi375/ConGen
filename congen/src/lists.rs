@@ -82,6 +82,7 @@ where
             type_name: Self::type_name(),
             inner_desc,
             has_default: false,
+            key_is_int: true,
         }
         .into()
     }

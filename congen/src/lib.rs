@@ -245,24 +245,23 @@ impl Description {
 
     pub fn actionable_fields(&self) -> Vec<ActionableField> {
         let composite = match self {
-            Description::Field(_field) => {
+            Description::Field(_) | Description::List(_) => {
                 return vec![ActionableField {
                     description: self.clone(),
                     path: VecDeque::new(),
                 }];
             }
             Description::Composit(comp) => comp,
-            Description::List(_list) => todo!(),
         };
 
         let mut actionable = Vec::new();
 
         for field in composite.fields.iter() {
             match field {
-                Description::Field(field) => {
+                Description::Field(_) | Description::List(_) => {
                     actionable.push(ActionableField {
-                        description: field.clone().into(),
-                        path: VecDeque::from([field.field_name]),
+                        description: field.clone(),
+                        path: VecDeque::from([field.name()]),
                     });
                 }
                 Description::Composit(composite) => {
@@ -279,7 +278,6 @@ impl Description {
                         });
                     }
                 }
-                Description::List(_list) => todo!(),
             }
         }
 
@@ -366,6 +364,7 @@ pub struct ListDescription {
     pub type_name: Cow<'static, str>,
     pub inner_desc: Box<Description>,
     pub has_default: bool,
+    pub key_is_int: bool,
 }
 
 impl ListDescription {
