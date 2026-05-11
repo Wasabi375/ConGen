@@ -92,6 +92,8 @@ where
 mod tests {
     use std::iter::empty;
 
+    extern crate self as congen;
+
     use super::*;
 
     #[derive(

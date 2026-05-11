@@ -19,7 +19,7 @@ pub fn value_enum_configuration(input: proc_macro::TokenStream) -> proc_macro::T
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     quote! {
-        impl #impl_generics congen::ValueEnumConfiguration for #ty #ty_generics #where_clause {}
+        impl #impl_generics congen::clap_bridge::ValueEnumConfiguration for #ty #ty_generics #where_clause {}
     }
     .into()
 }

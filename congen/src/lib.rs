@@ -1,7 +1,5 @@
-mod clap_bridge;
+pub mod clap_bridge;
 mod impls;
-
-extern crate self as congen;
 
 pub use congen_derive::{Configuration, ValueEnumConfiguration};
 
@@ -9,7 +7,7 @@ use std::{any::Any, borrow::Cow, collections::VecDeque};
 
 use thiserror::Error;
 
-pub use clap_bridge::{CongenClap, ValueEnumConfiguration};
+pub use clap_bridge::CongenClap;
 
 /// Denotes that the operation is not supported by a [Configuration]
 #[derive(Debug, Error)]

@@ -1,14 +1,12 @@
-#![allow(unused)]
-
-use clap::{Command, Parser};
-use congen::{CompositDescription, Configuration, Description};
+use clap::Parser;
+use congen::Configuration;
 
 // TODO how do I want to handle Vec and or HashMap?
 // TODO how do I want to handle transparent wrapper types like Box, Arc, Rc, etc?
 
 // TODO remove Debug implementations from generated structs
 
-#[derive(congen::Configuration, Debug)]
+#[derive(Configuration, Debug)]
 struct Config {
     a: u32,
     #[congen(default)]
@@ -22,7 +20,7 @@ struct Config {
     opt: Option<SubConfig>,
 }
 
-#[derive(congen::Configuration, Debug)]
+#[derive(Configuration, Debug)]
 pub struct SubConfig {
     #[congen(default = 5)]
     d: u32,
