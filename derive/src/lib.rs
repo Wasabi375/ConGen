@@ -62,7 +62,7 @@ pub fn configuration(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     .into()
 }
 
-#[expect(unused)]
+#[expect(unused)] // TODO
 fn derive_option_impl(ty: &Ident, change_type: &Ident, fields: &[CongenField]) -> TokenStream {
     let has_default = fields.iter().fold(true, |acc, field| {
         let field_has_default = field.attr.default.is_some();
@@ -173,6 +173,7 @@ fn derive_configuration_impl(
             }
 
             fn default() -> Result<Self, congen::NotSupported> {
+                #[allow(unreachable_code)]
                 Ok(Self {
                     #(#field_defaults),*
                 })
