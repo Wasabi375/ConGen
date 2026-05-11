@@ -1,9 +1,10 @@
 pub mod clap_bridge;
-mod impls;
+pub mod option;
+pub mod primitives;
 
 pub use congen_derive::{Configuration, ValueEnumConfiguration};
 
-use std::{any::Any, borrow::Cow, collections::VecDeque};
+use std::{any::Any, borrow::Cow, collections::VecDeque, mem::MaybeUninit};
 
 use thiserror::Error;
 
@@ -346,23 +347,31 @@ impl FieldDescription {
     }
 }
 
-/// [CongenChange] for [Option]
-// TODO internal
-#[derive(Default, Debug)]
-pub enum OptionChange<T> {
-    Apply(T),
-    Unset,
-    #[default]
-    NoChange,
-}
+/// A helper to safely downcast types
+///
+/// this will panic if the downcast is not safe.
+/// Used to handle generics, where we know `T` and `F` should be of the same type,
+/// but can't express this in the type system, e.g. circular type between `Configuration` and
+/// `CongenChange`:
+/// `<C as Configuration>::CongenChange::Configuration == C`
+pub(crate) fn downcast<F: 'static, T: 'static>(value: F) -> T {
+    let mut maybe = MaybeUninit::new(value);
 
-impl<T> OptionChange<T> {
-    /// Same as [Option::unwrap]
-    pub fn unwrap(self) -> T {
-        match self {
-            OptionChange::Apply(c) => c,
-            OptionChange::Unset => panic!("OptionChange is Unset but unwrap was called!"),
-            OptionChange::NoChange => panic!("OptionChange is NoChange but unwrap was called!"),
-        }
+    unsafe {
+        // Safety: created through MaybeUninit::new
+        let value: &mut F = maybe.assume_init_mut();
+        let value: &mut dyn Any = value;
+        let value: &mut T = value.downcast_mut().unwrap_or_else(|| {
+            panic!(
+                "called downcast on incompatible types: {} => {}",
+                core::any::type_name::<F>(),
+                core::any::type_name::<T>()
+            )
+        });
+
+        // Safety: value is properly initialized as it is a reference to "maybe"
+        //      this is a valid "move" because "maybe" is of type MaybeUninit and never accessed
+        //      again, not even dropped.
+        core::ptr::read(value)
     }
 }

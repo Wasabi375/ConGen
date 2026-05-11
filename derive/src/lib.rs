@@ -196,7 +196,7 @@ fn derive_change_type(
         let ident = &field.field.ident;
         if let Some(ty) = field.option_type.as_ref() {
             quote! {
-                #ident: congen::OptionChange<<#ty as congen::Configuration>::CongenChange>
+                #ident: congen::option::OptionChange<<#ty as congen::Configuration>::CongenChange>
             }
         } else {
             let ty = &field.field.ty;
