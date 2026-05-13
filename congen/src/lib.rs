@@ -223,23 +223,27 @@ impl Description {
     }
 
     /// Returns true if a path is valid for the [Configuration]
-    pub fn is_path_valid<'a, 's, P>(&'s self, mut path: P) -> bool
+    pub fn actionable_field<'a, 's, P>(&'s self, mut path: P) -> Option<Description>
     where
         P: Iterator<Item = &'a str>,
     {
         match self {
             Description::Composit(composit_description) => {
                 let Some(next_field_name) = path.next() else {
-                    return false;
+                    return if composit_description.is_actionable() {
+                        Some(self.clone())
+                    } else {
+                        None
+                    };
                 };
+                let next_field = composit_description.field(next_field_name)?;
 
-                let Some(next_field) = composit_description.field(next_field_name) else {
-                    return false;
-                };
-
-                next_field.is_path_valid(path)
+                next_field.actionable_field(path)
             }
-            Description::Field(_) | Description::List(_) => path.next().is_none(),
+            Description::Field(_) | Description::List(_) if path.next().is_none() => {
+                Some(self.clone())
+            }
+            _ => None,
         }
     }
 

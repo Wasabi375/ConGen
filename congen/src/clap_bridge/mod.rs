@@ -123,7 +123,12 @@ where
 
         let field_path = field_name.split(".");
 
-        T::description("").is_path_valid(field_path.clone());
+        let Some(_field_desc) = T::description("").actionable_field(field_path.clone()) else {
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::InvalidValue,
+                "invalid path",
+            ));
+        };
 
         let Some((verb_name, verb_cmd)) = field_cmd.subcommand() else {
             return Err(clap::Error::new(clap::error::ErrorKind::MissingSubcommand));
