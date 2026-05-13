@@ -311,13 +311,17 @@ fn derive_congen_change(
                     Some(_) => return Err(congen::VerbError::InvalidPath),
                     None => {
                         return match verb {
-                            congen::ChangeVerb::Set(_) | congen::ChangeVerb::SetAny(_)
+                            congen::ChangeVerb::Set(_) | congen::ChangeVerb::SetAny(_) | congen::ChangeVerb::List(_)
                                 => Err(congen::VerbError::UnsupportedVerb(verb)),
                             congen::ChangeVerb::SetFlag | congen::ChangeVerb::Unset => {
                                 eprintln!("set-flag and unset are not supported by derived congens");
                                 Err(congen::VerbError::UnsupportedVerb(verb))
                             },
                             congen::ChangeVerb::UseDefault => Ok(<Self as congen::CongenChange>::default()?),
+                            unknown => {
+                                eprintln!("unkown ChangeVerb {unknown:?}");
+                                Err(congen::VerbError::UnsupportedVerb(unknown))
+                            }
                         }
                     },
                 };

@@ -1,6 +1,9 @@
-use std::{borrow::Cow, mem::take};
+use std::{borrow::Cow, iter::empty, mem::take};
 
-use crate::{Configuration, CongenChange, Description, ListDescription, NotSupported, self_cast};
+use crate::{
+    ChangeVerb, Configuration, CongenChange, Description, FieldDescription, ListDescription,
+    ListKey, ListVerb, NotSupported, VerbError, self_cast,
+};
 
 #[derive(Debug, Default)]
 pub enum VecChange<T> {
@@ -30,7 +33,11 @@ where
                 index < self.len(),
                 "User specified index {index} is to large. List is 0 indexed with a lenght of {} and a largest index of {}",
                 self.len(),
-                self.len() - 1
+                if self.is_empty() {
+                    "NaN".to_string()
+                } else {
+                    format!("{}", self.len() - 1)
+                }
             );
         };
         match change {
@@ -131,13 +138,63 @@ where
         *self = VecChange::ApplyMany(changes);
     }
 
-    fn from_path_and_verb<'a, P>(
-        _path: P,
-        _verb: crate::ChangeVerb,
-    ) -> Result<Self, crate::VerbError>
+    fn from_path_and_verb<'a, P>(mut path: P, verb: ChangeVerb) -> Result<Self, VerbError>
     where
         P: Iterator<Item = &'a str>,
     {
-        todo!()
+        assert!(path.next().is_none(), "field path should end at List<T>");
+
+        let inner_desc = C::Configuration::description("");
+
+        match verb {
+            ChangeVerb::Set(_)
+            | ChangeVerb::SetFlag
+            | ChangeVerb::Unset
+            | ChangeVerb::UseDefault
+            | ChangeVerb::SetAny(_) => Err(VerbError::UnsupportedVerb(verb)),
+            ChangeVerb::List(list) => match inner_desc {
+                Description::Field(field_description) => {
+                    Self::inner_field_from_verb(list, &field_description)
+                }
+                Description::Composit(_composit_description) => {
+                    todo!("composite in list from verb")
+                }
+                Description::List(_list_description) => todo!("list in list from verb"),
+            },
+        }
+    }
+}
+
+impl<C> VecChange<C>
+where
+    C: CongenChange + 'static,
+    C::Configuration: 'static,
+{
+    fn inner_field_from_verb(
+        verb: ListVerb,
+        _field_desc: &FieldDescription,
+    ) -> Result<Self, VerbError> {
+        match verb {
+            ListVerb::Append { new_value } => Ok(VecChange::Append(C::from_path_and_verb(
+                empty(),
+                ChangeVerb::Set(new_value),
+            )?)),
+            ListVerb::Update { key, updated_value } => {
+                let ListKey::Int(key) = key else {
+                    return Err(VerbError::WrongKeyType);
+                };
+                Ok(VecChange::Update(
+                    key,
+                    C::from_path_and_verb(empty(), ChangeVerb::Set(updated_value))?,
+                ))
+            }
+            ListVerb::Remove { key } => {
+                let ListKey::Int(key) = key else {
+                    return Err(VerbError::WrongKeyType);
+                };
+                Ok(VecChange::Remove(key))
+            }
+            ListVerb::Empty => Ok(VecChange::Empty),
+        }
     }
 }

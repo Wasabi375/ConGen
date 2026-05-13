@@ -75,6 +75,7 @@ impl CongenChange for Option<bool> {
             ChangeVerb::SetFlag => Ok(Some(true)),
             ChangeVerb::Unset => Ok(Some(false)),
             ChangeVerb::UseDefault => Ok(Some(Configuration::default()?)),
+            ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
         }
     }
 
@@ -139,9 +140,10 @@ impl CongenChange for Option<String> {
             ChangeVerb::SetAny(value) => Ok(Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
-            ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
-                Err(VerbError::UnsupportedVerb(verb))
-            }
+            ChangeVerb::UseDefault
+            | ChangeVerb::SetFlag
+            | ChangeVerb::Unset
+            | ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
         }
     }
 
@@ -209,9 +211,10 @@ impl CongenChange for Option<u32> {
             ChangeVerb::SetAny(value) => Ok(Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
-            ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
-                Err(VerbError::UnsupportedVerb(verb))
-            }
+            ChangeVerb::UseDefault
+            | ChangeVerb::SetFlag
+            | ChangeVerb::Unset
+            | ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
         }
     }
 

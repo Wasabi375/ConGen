@@ -32,7 +32,9 @@ enum Variants {
 fn main() {
     let args = cli_test::TestCli::parse();
     match args.command {
-        cli_test::Commands::DoSomething => {}
+        cli_test::Commands::DoSomething => {
+            println!("{:#?}", Config::description(""));
+        }
         cli_test::Commands::Config(congen_clap) => {
             let mut config = Config {
                 field: 67,

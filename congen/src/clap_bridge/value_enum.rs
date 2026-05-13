@@ -74,9 +74,10 @@ where
             ChangeVerb::SetAny(value) => Ok(Self::Some(
                 *value.downcast().map_err(|_| VerbError::DowncastFailed)?,
             )),
-            ChangeVerb::UseDefault | ChangeVerb::SetFlag | ChangeVerb::Unset => {
-                Err(VerbError::UnsupportedVerb(verb))
-            }
+            ChangeVerb::UseDefault
+            | ChangeVerb::SetFlag
+            | ChangeVerb::Unset
+            | ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
         }
     }
 

@@ -1,8 +1,10 @@
 mod value_enum;
 
-use clap::{Arg, Args, Command, FromArgMatches};
+use clap::{Arg, ArgMatches, Args, Command, FromArgMatches, parser::MatchesError};
 
-use crate::{ChangeVerb, Configuration, CongenChange, Description};
+use crate::{
+    ChangeVerb, Configuration, CongenChange, Description, ListDescription, ListKey, ListVerb,
+};
 
 pub use value_enum::ValueEnumConfiguration;
 
@@ -36,7 +38,7 @@ impl<T: Configuration> CongenClap<T> {
                 .map(|mut actionable| {
                     let field_name = actionable.path.make_contiguous().join(".");
                     let mut field_command =
-                        Command::new(field_name).subcommand_required(!for_update);
+                        Command::new(&field_name).subcommand_required(!for_update);
 
                     match &actionable.description {
                         Description::Field(field) => {
@@ -84,6 +86,7 @@ impl<T: Configuration> CongenClap<T> {
                         field_command = field_command.subcommand(Command::new("use-default"));
                     }
                     if actionable.description.allow_unset() {
+                        eprintln!("create unset command for {field_name}");
                         field_command = field_command.subcommand(Command::new("unset"));
                     }
 
@@ -123,7 +126,7 @@ where
 
         let field_path = field_name.split(".");
 
-        let Some(_field_desc) = T::description("").actionable_field(field_path.clone()) else {
+        let Some(field_desc) = T::description("").actionable_field(field_path.clone()) else {
             return Err(clap::Error::raw(
                 clap::error::ErrorKind::InvalidValue,
                 "invalid path",
@@ -131,28 +134,97 @@ where
         };
 
         let Some((verb_name, verb_cmd)) = field_cmd.subcommand() else {
-            return Err(clap::Error::new(clap::error::ErrorKind::MissingSubcommand));
+            return Err(clap::Error::raw(
+                clap::error::ErrorKind::MissingSubcommand,
+                "missing verb",
+            ));
         };
 
-        let verb = match verb_name {
+        let verb = match dbg!(verb_name) {
             "set" => match verb_cmd.try_get_one("value").map(|value| value.cloned()) {
                 Ok(Some(value)) => ChangeVerb::Set(value),
-                Err(clap::parser::MatchesError::UnknownArgument { .. }) => ChangeVerb::SetFlag,
-                Ok(None) => return Err(clap::Error::new(clap::error::ErrorKind::TooFewValues)),
+                Err(MatchesError::UnknownArgument { .. }) => ChangeVerb::SetFlag,
+                Ok(None) => {
+                    return Err(clap::Error::raw(
+                        clap::error::ErrorKind::TooFewValues,
+                        "missing value",
+                    ));
+                }
                 Err(_err) => return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue)),
             },
             "unset" => ChangeVerb::Unset,
             "use-default" => ChangeVerb::UseDefault,
-            _ => return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand)),
+            "append" => match verb_cmd.try_get_one("value").map(|value| value.cloned()) {
+                Ok(Some(value)) => ListVerb::Append { new_value: value }.into(),
+                Err(MatchesError::UnknownArgument { .. }) => todo!("complex inner list type"),
+                Ok(None) => {
+                    return Err(clap::Error::raw(
+                        clap::error::ErrorKind::TooFewValues,
+                        "missing value",
+                    ));
+                }
+                Err(_err) => return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue)),
+            },
+            "update" => {
+                let Description::List(list_desc) = field_desc else {
+                    return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand));
+                };
+                let Some(key) = get_key(verb_cmd, &list_desc) else {
+                    return Err(clap::Error::raw(
+                        clap::error::ErrorKind::TooFewValues,
+                        "missing key",
+                    ));
+                };
+                match verb_cmd.try_get_one("value").map(|value| value.cloned()) {
+                    Ok(Some(value)) => ListVerb::Update {
+                        key,
+                        updated_value: value,
+                    }
+                    .into(),
+                    Err(MatchesError::UnknownArgument { .. }) => todo!("complex inner list type"),
+                    Ok(None) => return Err(clap::Error::new(clap::error::ErrorKind::TooFewValues)),
+                    Err(_err) => {
+                        return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue));
+                    }
+                }
+            }
+            "remove" => {
+                let Description::List(list_desc) = field_desc else {
+                    return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand));
+                };
+                let Some(key) = get_key(verb_cmd, &list_desc) else {
+                    return Err(clap::Error::raw(
+                        clap::error::ErrorKind::TooFewValues,
+                        "missing key",
+                    ));
+                };
+                ListVerb::Remove { key }.into()
+            }
+            "empty" => ListVerb::Empty.into(),
+            verb => {
+                return Err(clap::Error::raw(
+                    clap::error::ErrorKind::InvalidSubcommand,
+                    format!("invalid verb: {verb}"),
+                ));
+            }
         };
-
-        dbg!(&verb);
-        dbg!(field_path.clone().collect::<Vec<_>>());
 
         let change = T::CongenChange::from_path_and_verb(field_path, verb)
             .expect("Failed to create change for path");
 
         self.change.apply_change(change);
         Ok(())
+    }
+}
+
+fn get_key(arg_matches: &ArgMatches, field_desc: &ListDescription) -> Option<ListKey> {
+    if field_desc.key_is_int {
+        arg_matches
+            .get_one::<usize>("key")
+            .map(|key| ListKey::Int(*key))
+    } else {
+        arg_matches
+            .get_one::<String>("key")
+            .map(|key| ListKey::Stringy(key.clone()))
     }
 }

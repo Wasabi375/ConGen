@@ -166,6 +166,7 @@ where
                         Ok(OptionChange::Apply(C::from_path_and_verb(path, verb)?))
                     }
                 }
+                ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
             },
             Description::Field(desc) => {
                 if path.next().is_some() {
@@ -184,6 +185,7 @@ where
                     ChangeVerb::SetFlag => Err(VerbError::UnsupportedVerb(verb)),
                     ChangeVerb::Unset => Ok(OptionChange::Unset),
                     ChangeVerb::UseDefault => Ok(OptionChange::Unset),
+                    ChangeVerb::List(_) => Err(VerbError::UnsupportedVerb(verb)),
                 }
             }
             Description::List(_) => Err(VerbError::InvalidDescription),

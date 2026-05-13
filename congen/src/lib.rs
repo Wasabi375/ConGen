@@ -148,6 +148,8 @@ pub enum VerbError {
     DowncastFailed,
     #[error("the description is in an invalid state")]
     InvalidDescription,
+    #[error("wrong key type. Expected either String or Int but got the opposite")]
+    WrongKeyType,
 }
 
 /// A [ChangeVerb] is used to create a [CongenChange] based on a path.
@@ -168,6 +170,30 @@ pub enum ChangeVerb {
     ///
     /// The value must be of the same type as defined by the [Configuration] path.
     SetAny(Box<dyn Any + 'static>),
+
+    List(ListVerb),
+}
+
+// TODO internal
+#[derive(Debug)]
+pub enum ListVerb {
+    Append { new_value: String },
+    Update { key: ListKey, updated_value: String },
+    Remove { key: ListKey },
+    Empty,
+}
+
+// TODO internal
+#[derive(Debug)]
+pub enum ListKey {
+    Stringy(String),
+    Int(usize),
+}
+
+impl From<ListVerb> for ChangeVerb {
+    fn from(value: ListVerb) -> Self {
+        ChangeVerb::List(value)
+    }
 }
 
 /// Descibes a [Configuration]
